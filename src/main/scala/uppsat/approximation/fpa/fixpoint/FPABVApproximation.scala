@@ -48,7 +48,9 @@ import uppsat.approximation.reconstruction.PostOrderReconstruction
  * 
  */
 trait FPABVContext extends ApproximationContext {
-   type Precision = (Int, Int) // (integralBits, FractionalBits)
+  type Precision = (Int, Int) // (integralBits, FractionalBits)
+   val maxIntegralBits = 64
+  val maxFractionalBits = 64
    val precisionOrdering = new IntTuplePrecisionOrdering((5,5), (25,25))
    val inputTheory = FloatingPointTheory
    val outputTheory = FixPointTheory
@@ -156,11 +158,10 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
      
     
     val appendedBits =
-      if (integralWidth + fractionalWidth > prependedBits.length)
-        prependedBits ++ List.fill(integralWidth + fractionalWidth - prependedBits.length)(0)
+      if (fractionalWidth > prependedBits.length - newPosition)
+        prependedBits ++ List.fill(fractionalWidth - (prependedBits.length - newPosition))(0)
       else
         prependedBits
-       
     val iBits = appendedBits.drop(newPosition - integralWidth).take(integralWidth)
     val fBits = appendedBits.drop(newPosition).take(fractionalWidth)
 
@@ -478,6 +479,69 @@ trait FPABVRefinementStrategy extends FPABVContext with UniformRefinementStrateg
     precisionOrdering.+(p, (4,4))
   }
 } 
+
+trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStrategy {
+    def increasePrecision(p : Precision) = {
+    precisionOrdering.+(p, (4,4))
+  }
+
+  override def satRefine(ast : AST, decodedModel : Model, failedModel : Model, pmap : PrecisionMap[Precision])  = {
+
+    val iprime =  pmap(ast.label)._1
+    var i = iprime
+    val dprime = pmap(ast.label)._2
+    var d = dprime
+
+    val it = ast.iterator
+    while (it.hasNext) {
+      val subTree = it.next()
+      failedModel(subTree).symbol match {
+        case fpLit : FloatingPointLiteral => { 
+          fpLit.getFactory match {
+            case FPConstantFactory(_, eBits,  sBits) => {
+              val bias = math.pow(2,eBits.length-1).toInt - 1
+              d = d.max(sBits.reverse.dropWhile(x => x == 0).length + 1) - (bitsToInt(eBits)  - bias)
+              i = i.max(bitsToInt(eBits) + 1 - bias )     
+            }
+            case FPPlusInfinity => {
+              d = maxFractionalBits
+              i = maxIntegralBits
+           }
+            case FPMinusInfinity => {
+              d = maxFractionalBits
+              i = maxIntegralBits
+            }
+            case FPNegativeZero => { }
+            case FPPositiveZero => { }
+          }         
+        }
+        case _ => { }
+      }
+    }
+ 
+    // TODO: Something is weird here
+     if (d > maxFractionalBits  ||  i > maxIntegralBits) {
+       println("precisionoverflow ")
+       d = maxFractionalBits
+       i = maxIntegralBits
+     }
+    if (i == iprime && d == dprime) {
+      i += 4
+      d += 4
+    }
+
+    // TODO: Better mapping function
+    println("newprecision " + (i,d))
+    pmap.map((p : Precision) => precisionOrdering.+(p, (i-p._1,d-p._2)))
+    //pmap.map( satRefinePrecision)
+  }  
+}
+
+object FPABVMaxUni extends FPABVContext
+    with FPABVCodec
+    with EqualityAsAssignmentReconstruction
+    with FPABVMaxRefinementStrategy {
+}
 
 object FPABVApp extends FPABVContext 
                   with FPABVCodec
