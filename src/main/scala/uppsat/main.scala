@@ -63,7 +63,8 @@ object globalOptions {
                           "fixedpoint-no-reconstruct" ->  new Approximation(FPABVEmptyApp),
                           "ijcar-node-by-node" -> new Approximation(IJCARSmallFloatsNodeByNodeApp),
                           "ijcar-no-reconstruct" -> new Approximation(IJCARSmallFloatsEmptyapp),
-                            "joels" -> new Approximation(FPABVMaxUni)
+    "joels" -> new Approximation(FPABVMaxUni),
+                                "joels2" -> new Approximation(FPABVCompInc)
                          ) //"empty" -> EmptyApproximation) 
                          
   var approximation = "ijcar"

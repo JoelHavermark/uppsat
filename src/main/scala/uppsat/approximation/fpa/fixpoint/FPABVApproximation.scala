@@ -30,6 +30,7 @@ import uppsat.solver.Z3Solver
 import uppsat.globalOptions
 import uppsat.approximation.reconstruction.EqualityAsAssignmentReconstruction
 import uppsat.approximation.refinement.UniformRefinementStrategy
+import uppsat.approximation.refinement.ErrorBasedRefinementStrategy
 import uppsat.approximation.reconstruction.EmptyReconstruction
 import uppsat.approximation.reconstruction.PostOrderReconstruction
 
@@ -51,7 +52,7 @@ trait FPABVContext extends ApproximationContext {
   type Precision = (Int, Int) // (integralBits, FractionalBits)
    val maxIntegralBits = 64
   val maxFractionalBits = 64
-   val precisionOrdering = new IntTuplePrecisionOrdering((5,5), (25,25))
+   val precisionOrdering = new IntTuplePrecisionOrdering((5,5), (maxIntegralBits,maxFractionalBits))
    val inputTheory = FloatingPointTheory
    val outputTheory = FixPointTheory
 }
@@ -460,7 +461,15 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
     
     val appValue = retrieveFromAppModel(ast, appModel) 
     val decodedValue = decodeSymbolValue(ast.symbol, appValue, pmap(ast.label)) 
-    
+    decodedValue.symbol match {
+      case _ : FloatingPointLiteral => ()
+      case _ : BooleanConstant => ()
+      case _ => 
+        println("*#*ast " + ast)
+        println("appValue " + appValue)
+        println("decodedValue " + decodedValue)
+    }
+
     if (decodedModel.contains(ast)){
       val existingValue = decodedModel(ast).symbol 
       if ( existingValue != decodedValue.symbol) {
@@ -520,6 +529,7 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
     }
  
     // TODO: Something is weird here
+    // The 
      if (d > maxFractionalBits  ||  i > maxIntegralBits) {
        println("precisionoverflow ")
        d = maxFractionalBits
@@ -535,6 +545,124 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
     pmap.map((p : Precision) => precisionOrdering.+(p, (i-p._1,d-p._2)))
     //pmap.map( satRefinePrecision)
   }  
+}
+
+// TODO: The copied functions
+trait FPABVCompRef extends FPABVContext with ErrorBasedRefinementStrategy {
+  // TODO: Set this value to something good.
+  val fractionToRefine = 3.0
+  val precisionIncrement = (4,4)
+
+  // Probably done
+  def defaultRefinePrecision(p : Precision) : Precision = {
+    precisionOrdering.+(p, (4,4))
+  }
+
+  def unsatRefinePrecision(p : Precision) : Precision = {
+
+        precisionOrdering.+(p, (4,4))
+  }
+  
+  def unsatRefine(ast : AST, core : List[AST], pmap : PrecisionMap[Precision]) : PrecisionMap[Precision] = {
+    pmap.map(unsatRefinePrecision)
+  }
+
+  // Should calculate how much error each node increase error
+  // based on the things in paper two and three.
+  def nodeError(decodedModel : Model)(failedModel : Model)(accu : Map[AST, Double], ast : AST) : Map[AST, Double] = {
+
+    val AST(symbol, label, children) = ast      
+    symbol match {
+      case literal : FloatingPointLiteral => accu
+      case fpfs : FloatingPointFunctionSymbol if (fpfs.getFactory == FPToFPFactory) =>       accu + (ast -> 0 )        
+      case fpfs : FloatingPointFunctionSymbol => {
+
+        // TODO Watch out for casting functions 
+        println("The function sumbol where " + fpfs) 
+        val Some(outErr) = computeRelativeError(ast, decodedModel, failedModel)
+        val inErrors = children.map(computeRelativeError(_, decodedModel, failedModel)).collect{case Some(x) => x}
+        val sumInErrors = inErrors.fold(0.0){(x,y) => x + y}
+        val avgInErr = sumInErrors /  inErrors.length
+        accu + (ast -> outErr / (1 + avgInErr))        
+      }
+      case _ => accu
+    }
+  }
+
+  // Copied from smallfloats
+  // What does one vertical bar mean in case
+  def relativeError(decoded : FloatingPointLiteral, precise : FloatingPointLiteral) : Double = {
+    (decoded.getFactory, precise.getFactory) match {
+      case (x, y) if (x == y) =>
+        0.0 //Values are the same
+      case (FPPlusInfinity, _)    |
+           (_, FPPlusInfinity)    |
+           (FPMinusInfinity, _)   |
+           (_, FPMinusInfinity)   => Double.PositiveInfinity
+      case (x : FPConstantFactory, y : FPConstantFactory) => {
+        val a = bitsToDouble(decoded)
+        val b = bitsToDouble(precise)
+        Math.abs((a - b)/b)
+      }        
+      case _ =>
+        0.0
+    }
+  }
+
+  // Copied from smallfloats
+  def computeRelativeError ( ast : AST, decodedModel : Model, failedModel : Model) : Option[Double] = {
+
+
+    ast.ppWithModels("",decodedModel,failedModel,false)
+   (decodedModel(ast).symbol, failedModel(ast).symbol) match {
+      case (aValue : FloatingPointLiteral, bValue : FloatingPointLiteral) => 
+          Some(relativeError(aValue, bValue))
+      case _ => None
+    }
+  }
+
+
+  // TODO A lot 
+  def satRefinePrecision( ast : AST, pmap : PrecisionMap[Precision]) : Precision = {
+      val p = pmap(ast.label)
+
+    println("Hello")
+    ast.symbol match {
+      case fpLit : FloatingPointLiteral => {
+        fpLit.getFactory match {
+          case FPConstantFactory(_, eBits,  sBits) => {
+            val bias = math.pow(2,eBits.length-1).toInt - 1
+            val prec = ((bitsToInt(eBits) + 1 - bias), (sBits.reverse.dropWhile(x => x == 0).length + 1 - (bitsToInt(eBits)  - bias)))
+            prec
+        
+          }
+          case FPPlusInfinity => {
+            (maxIntegralBits,maxFractionalBits)
+          }
+          case FPMinusInfinity => {
+            (maxIntegralBits,maxFractionalBits)
+          }
+          case FPNegativeZero => {(p._1,p._2)}
+          case FPPositiveZero => {(p._1,p._2)}
+        }
+      }
+      case fpSym : FloatingPointFunctionSymbol => {
+        // TODO: Do something better here maybe take max of children
+        (p._1,p._2)
+      }
+      case fpPred : FloatingPointPredicateSymbol => {
+        (p._1,p._2)
+      }
+      //case _ => {(0,0) }
+    }
+  }
+
+}
+
+object FPABVCompInc extends FPABVContext
+    with FPABVCodec
+    with EqualityAsAssignmentReconstruction
+    with FPABVCompRef {
 }
 
 object FPABVMaxUni extends FPABVContext
