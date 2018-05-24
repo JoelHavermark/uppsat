@@ -50,8 +50,9 @@ import uppsat.approximation.reconstruction.PostOrderReconstruction
  */
 trait FPABVContext extends ApproximationContext {
   type Precision = (Int, Int) // (integralBits, FractionalBits)
-   val maxIntegralBits = 64
-  val maxFractionalBits = 64
+
+  val (maxIntegralBits,maxFractionalBits) = (64,64)
+  println("Max bits" + (maxIntegralBits,maxFractionalBits))
    val precisionOrdering = new IntTuplePrecisionOrdering((5,5), (maxIntegralBits,maxFractionalBits))
    val inputTheory = FloatingPointTheory
    val outputTheory = FixPointTheory
@@ -461,15 +462,7 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
     
     val appValue = retrieveFromAppModel(ast, appModel) 
     val decodedValue = decodeSymbolValue(ast.symbol, appValue, pmap(ast.label)) 
-    decodedValue.symbol match {
-      case _ : FloatingPointLiteral => ()
-      case _ : BooleanConstant => ()
-      case _ => 
-        println("*#*ast " + ast)
-        println("appValue " + appValue)
-        println("decodedValue " + decodedValue)
-    }
-
+  
     if (decodedModel.contains(ast)){
       val existingValue = decodedModel(ast).symbol 
       if ( existingValue != decodedValue.symbol) {
@@ -490,12 +483,14 @@ trait FPABVRefinementStrategy extends FPABVContext with UniformRefinementStrateg
 } 
 
 trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStrategy {
-    def increasePrecision(p : Precision) = {
+  def increasePrecision(p : Precision) = {
+
     precisionOrdering.+(p, (4,4))
   }
 
   override def satRefine(ast : AST, decodedModel : Model, failedModel : Model, pmap : PrecisionMap[Precision])  = {
 
+    println("Hello from SATrefine")
     val iprime =  pmap(ast.label)._1
     var i = iprime
     val dprime = pmap(ast.label)._2
@@ -555,6 +550,7 @@ trait FPABVCompRef extends FPABVContext with ErrorBasedRefinementStrategy {
 
   // Probably done
   def defaultRefinePrecision(p : Precision) : Precision = {
+    println("hello")
     precisionOrdering.+(p, (4,4))
   }
 
@@ -578,11 +574,11 @@ trait FPABVCompRef extends FPABVContext with ErrorBasedRefinementStrategy {
       case fpfs : FloatingPointFunctionSymbol => {
 
         // TODO Watch out for casting functions 
-        println("The function sumbol where " + fpfs) 
         val Some(outErr) = computeRelativeError(ast, decodedModel, failedModel)
         val inErrors = children.map(computeRelativeError(_, decodedModel, failedModel)).collect{case Some(x) => x}
         val sumInErrors = inErrors.fold(0.0){(x,y) => x + y}
         val avgInErr = sumInErrors /  inErrors.length
+        println(outErr / (1 + avgInErr))
         accu + (ast -> outErr / (1 + avgInErr))        
       }
       case _ => accu
@@ -611,9 +607,6 @@ trait FPABVCompRef extends FPABVContext with ErrorBasedRefinementStrategy {
 
   // Copied from smallfloats
   def computeRelativeError ( ast : AST, decodedModel : Model, failedModel : Model) : Option[Double] = {
-
-
-    ast.ppWithModels("",decodedModel,failedModel,false)
    (decodedModel(ast).symbol, failedModel(ast).symbol) match {
       case (aValue : FloatingPointLiteral, bValue : FloatingPointLiteral) => 
           Some(relativeError(aValue, bValue))
@@ -625,12 +618,13 @@ trait FPABVCompRef extends FPABVContext with ErrorBasedRefinementStrategy {
   // TODO A lot 
   def satRefinePrecision( ast : AST, pmap : PrecisionMap[Precision]) : Precision = {
       val p = pmap(ast.label)
-
+  
     println("Hello")
     ast.symbol match {
       case fpLit : FloatingPointLiteral => {
         fpLit.getFactory match {
           case FPConstantFactory(_, eBits,  sBits) => {
+           
             val bias = math.pow(2,eBits.length-1).toInt - 1
             val prec = ((bitsToInt(eBits) + 1 - bias), (sBits.reverse.dropWhile(x => x == 0).length + 1 - (bitsToInt(eBits)  - bias)))
             prec
@@ -648,6 +642,7 @@ trait FPABVCompRef extends FPABVContext with ErrorBasedRefinementStrategy {
       }
       case fpSym : FloatingPointFunctionSymbol => {
         // TODO: Do something better here maybe take max of children
+        println("THIS IS IT")
         (p._1,p._2)
       }
       case fpPred : FloatingPointPredicateSymbol => {
@@ -656,7 +651,6 @@ trait FPABVCompRef extends FPABVContext with ErrorBasedRefinementStrategy {
       //case _ => {(0,0) }
     }
   }
-
 }
 
 object FPABVCompInc extends FPABVContext

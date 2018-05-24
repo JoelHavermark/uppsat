@@ -345,6 +345,7 @@ object FixPointTheory extends Theory {
   def genFxToFx(sd : Int, sf : Int, td : Int, tf : Int) = {
     // SMT-lib argument name is "fx"
     // Start by fixing the integral bits:
+  
     val firstStep = 
       if (sd < td) {
         // Pad with zeroes

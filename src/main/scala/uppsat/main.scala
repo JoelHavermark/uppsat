@@ -47,6 +47,7 @@ object globalOptions {
   var PARANOID = false
   var SURRENDER = false
 
+  var FXPRECISION : Option[(Int,Int)] = None
    val REG_SOLVERS = Map( "z3" -> new Z3Solver(), 
                          "mathsat" -> new MathSatSolver("Mathsat", ""),                         
                          "acdcl" -> new MathSatSolver("ACDCL (Mathsat)", "-theory.fp.mode=2 "), 
@@ -148,7 +149,8 @@ object main {
    * @return Returns true if arg was unparseable
    */
   def parseArgument( arg : String) : Boolean = {
-      val timeoutPattern = "-t=([0-9.]+)".r
+    val timeoutPattern = "-t=([0-9.]+)".r
+          val fixprecisionPattern = "-fxp=([0-9.]+),([0-9.]+)".r
       val seedPattern = "-seed=([0-9.]+)".r
       val appPattern = "-app=(\\S+)".r
       val backend = "-backend=(\\S+)".r
@@ -192,7 +194,9 @@ object main {
         case timeoutPattern(t) => {
           globalOptions.DEADLINE = Some(t.toInt * 1000)
         }
-        
+        case fixprecisionPattern(i,f) => {
+          globalOptions.FXPRECISION = Some((i.toInt,f.toInt))
+        }
         case seedPattern(s) => {
           globalOptions.RANDOM_SEED = s.toInt
         }
