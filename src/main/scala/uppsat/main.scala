@@ -49,26 +49,6 @@ object globalOptions {
   var SURRENDER = false
 
   var FXPRECISION : Option[(Int,Int)] = None
-   val REG_SOLVERS = Map( "z3" -> new Z3Solver(), 
-                         "mathsat" -> new MathSatSolver("Mathsat", ""),                         
-                         "acdcl" -> new MathSatSolver("ACDCL (Mathsat)", "-theory.fp.mode=2 "), 
-                         "nlsat" -> new Z3Solver("NLSAT","(check-sat-using qfnra-nlsat)\n")) 
-                         
-  val REG_APPROXS = Map( "ijcar" ->  new Approximation(IJCARSmallFloatsApp), 
-                          "saturation" ->  new Approximation(FxPntSmallFloatsApp),
-                          "smallints" ->  new Approximation(SmallIntsApp),
-                          "reals" ->  new Approximation(FPARealApp),
-                          "reals-node-by-node" ->  new Approximation(FPARealNodeByNodeApp),
-                          "saturation_reals" -> new Approximation(FxPntFPARealApp),
-                          "fixedpoint" ->  new Approximation(FPABVApp),
-                          "fixedpoint-node-by-node" ->  new Approximation(FPABVNodeByNodeApp),                          
-                          "fixedpoint-no-reconstruct" ->  new Approximation(FPABVEmptyApp),
-                          "ijcar-node-by-node" -> new Approximation(IJCARSmallFloatsNodeByNodeApp),
-                          "ijcar-no-reconstruct" -> new Approximation(IJCARSmallFloatsEmptyapp),
-
-           
-  ) //"empty" -> EmptyApproximation)
-
   
   def registeredSolvers(str : String) = {
     str match {

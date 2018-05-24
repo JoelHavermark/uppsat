@@ -51,8 +51,13 @@ import uppsat.approximation.reconstruction.PostOrderReconstruction
 trait FPABVContext extends ApproximationContext {
   type Precision = (Int, Int) // (integralBits, FractionalBits)
 
-  val (maxIntegralBits,maxFractionalBits) = (64,64)
-  println("Max bits" + (maxIntegralBits,maxFractionalBits))
+  val (maxIntegralBits,maxFractionalBits) =
+    globalOptions.FXPRECISION match {
+      case Some((i,f)) => (i,f)
+      case None => (64,64)
+    }
+
+
    val precisionOrdering = new IntTuplePrecisionOrdering((5,5), (maxIntegralBits,maxFractionalBits))
    val inputTheory = FloatingPointTheory
    val outputTheory = FixPointTheory
@@ -552,7 +557,7 @@ trait FPABVCompRef extends FPABVContext with ErrorBasedRefinementStrategy {
   val precisionIncrement = (4,4)
 
   // Probably done
-  def defaultRefinePrecision(p : Precision) : Precision = {
+  override def defaultRefinePrecision(p : Precision) : Precision = {
     println("hello")
     precisionOrdering.+(p, (4,4))
   }
