@@ -1,6 +1,7 @@
 package uppsat;
 
 
+
 import uppsat.precision.PrecisionMap
 import uppsat.Timer.TimeoutException
 import uppsat.theory.BooleanTheory._
@@ -64,19 +65,50 @@ object globalOptions {
                           "fixedpoint-no-reconstruct" ->  new Approximation(FPABVEmptyApp),
                           "ijcar-node-by-node" -> new Approximation(IJCARSmallFloatsNodeByNodeApp),
                           "ijcar-no-reconstruct" -> new Approximation(IJCARSmallFloatsEmptyapp),
-    "joels" -> new Approximation(FPABVMaxUni),
-                                "joels2" -> new Approximation(FPABVCompInc)
-                         ) //"empty" -> EmptyApproximation) 
+
+           
+  ) //"empty" -> EmptyApproximation)
+
+  
+  def registeredSolvers(str : String) = {
+    str match {
+      case "z3" => new Z3Solver() 
+      case "mathsat" => new MathSatSolver("Mathsat", "")                         
+      case "acdcl" => new MathSatSolver("ACDCL (Mathsat)", "-theory.fp.mode=2 ") 
+      case "nlsat" => new Z3Solver("NLSAT","(check-sat-using qfnra-nlsat)\n")  
+    }
+  }
+ 
+
+  def registeredApproximations(str : String) : Approximation = {
+    str match {
+      case "ijcar" =>  new Approximation(IJCARSmallFloatsApp)
+      case "saturation" =>  new Approximation(FxPntSmallFloatsApp)
+      case "smallints" =>  new Approximation(SmallIntsApp)
+      case "reals" =>  new Approximation(FPARealApp)
+      case "reals-node-by-node" =>  new Approximation(FPARealNodeByNodeApp)
+      case "saturation_reals" => new Approximation(FxPntFPARealApp)
+      case "fixedpoint" =>  new Approximation(FPABVApp)
+      case "fixedpoint-node-by-node" =>  new Approximation(FPABVNodeByNodeApp)                          
+      case "fixedpoint-no-reconstruct" =>  new Approximation(FPABVEmptyApp)
+      case "ijcar-node-by-node" => new Approximation(IJCARSmallFloatsNodeByNodeApp)
+      case "ijcar-no-reconstruct" => new Approximation(IJCARSmallFloatsEmptyapp)
+      case      "joels" => new Approximation(FPABVMaxUni)
+      case           "joels2" => new Approximation(FPABVCompInc)
+      case _ => throw new Exception("Unsupported approximation: \"" + str + "\"")
+    }
+  } 
+
                          
   var approximation = "ijcar"
   var backend = "z3"
   var validator = "z3"
 
-  def getApproximation = REG_APPROXS(approximation.toLowerCase())
+  def getApproximation = registeredApproximations(approximation.toLowerCase())
 
-  def getBackendSolver = REG_SOLVERS(backend.toLowerCase())
+  def getBackendSolver = registeredSolvers(backend.toLowerCase())
 
-  def getValidator = REG_SOLVERS(validator.toLowerCase())
+  def getValidator = registeredSolvers(validator.toLowerCase())
 
   def verbose(str : String) = {
     if (globalOptions.VERBOSE) {
@@ -173,23 +205,11 @@ object main {
         case "-f" => globalOptions.FORMULAS = true
         case "-surrender" => globalOptions.SURRENDER = true
         
-        case backend(solver) => 
-            if (globalOptions.REG_SOLVERS.contains(solver))
-              globalOptions.backend = solver
-            else
-              throw new Exception("Unsupported solver")
+        case backend(solver) => globalOptions.backend = solver
             
-        case validator(solver) => 
-            if (globalOptions.REG_SOLVERS.contains(solver))
-              globalOptions.validator = solver
-            else
-              throw new Exception("Unsupported solver")
+        case validator(solver) => globalOptions.validator = solver
         
-        case appPattern(app) =>
-          if (globalOptions.REG_APPROXS.contains(app))
-              globalOptions.approximation = app
-            else
-              throw new Exception("Unsupported approximation")
+        case appPattern(app) => globalOptions.approximation = app
         
         case timeoutPattern(t) => {
           globalOptions.DEADLINE = Some(t.toInt * 1000)
