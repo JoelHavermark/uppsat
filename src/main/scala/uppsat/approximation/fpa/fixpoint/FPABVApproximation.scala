@@ -58,7 +58,7 @@ trait FPABVContext extends ApproximationContext {
     }
 
 
-   val precisionOrdering = new IntTuplePrecisionOrdering((5,5), (maxIntegralBits,maxFractionalBits))
+   val precisionOrdering = new IntTuplePrecisionOrdering((4,4), (maxIntegralBits,maxFractionalBits))
    val inputTheory = FloatingPointTheory
    val outputTheory = FixPointTheory
 }
