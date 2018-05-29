@@ -498,12 +498,12 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
 
   override def satRefine(ast : AST, decodedModel : Model, failedModel : Model, pmap : PrecisionMap[Precision])  = {
 
-    println("Hello from SATrefine")
+
     val iprime =  pmap(ast.label)._1
     var i = iprime
     val dprime = pmap(ast.label)._2
     var d = dprime
-
+        println("Hello from SATrefine previous precision was " + (i,d))
     val it = ast.iterator
     while (it.hasNext) {
       val subTree = it.next()
@@ -512,14 +512,21 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
           fpLit.getFactory match {
             case FPConstantFactory(_, eBits,  sBits) => {
               val bias = math.pow(2,eBits.length-1).toInt - 1
-              d = d.max(sBits.reverse.dropWhile(x => x == 0).length + 1) - (bitsToInt(eBits)  - bias)
-              i = i.max(bitsToInt(eBits) + 1 - bias )     
+              val newi = bitsToInt(eBits) + 1 - bias
+              val newd = (sBits.reverse.dropWhile(x => x == 0).length + 1) - (bitsToInt(eBits)  - bias)
+              d = dprime.max(newd)
+              i = iprime.max(newi)
             }
             case FPPlusInfinity => {
               d = maxFractionalBits
               i = maxIntegralBits
            }
             case FPMinusInfinity => {
+              d = maxFractionalBits
+              i = maxIntegralBits
+            }
+            case FPSpecialValuesFactory(_) => {
+              // TODO: Look closer at this
               d = maxFractionalBits
               i = maxIntegralBits
             }
@@ -532,13 +539,15 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
     }
  
     // TODO: Something is weird here
-    // The 
-     if (d > maxFractionalBits  ||  i > maxIntegralBits) {
+    // The
+
+    if (d > maxFractionalBits  ||  i > maxIntegralBits) {
        println("precisionoverflow ")
        d = maxFractionalBits
-       i = maxIntegralBits
+      i = maxIntegralBits
+
      }
-    if (i == iprime && d == dprime) {
+     if (i == iprime && d == dprime) {
       i += 4
       d += 4
     }
