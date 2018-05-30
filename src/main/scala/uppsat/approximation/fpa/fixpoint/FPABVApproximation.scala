@@ -547,7 +547,7 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
       i = maxIntegralBits
 
      }
-     if (i == iprime && d == dprime) {
+     else if (i == iprime && d == dprime) {
       i += 4
       d += 4
     }
