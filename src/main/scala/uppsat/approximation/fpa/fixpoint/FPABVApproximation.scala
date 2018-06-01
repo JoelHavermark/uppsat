@@ -57,6 +57,11 @@ trait FPABVContext extends ApproximationContext {
       case None => (64,64)
     }
 
+  val (integralStep,fractionalStep) =
+    globalOptions.FXSTEP match {
+      case Some((istep,fstep)) => (istep,fstep)
+      case None => (4,4)
+    }
 
    val precisionOrdering = new IntTuplePrecisionOrdering((4,4), (maxIntegralBits,maxFractionalBits))
    val inputTheory = FloatingPointTheory
@@ -490,10 +495,11 @@ trait FPABVRefinementStrategy extends FPABVContext with UniformRefinementStrateg
   }
 } 
 
+
 trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStrategy {
   def increasePrecision(p : Precision) = {
-
-    precisionOrdering.+(p, (4,4))
+    println("newprecision " +     precisionOrdering.+(p, (integralStep ,fractionalStep)))
+    precisionOrdering.+(p, (integralStep ,fractionalStep))
   }
 
   override def satRefine(ast : AST, decodedModel : Model, failedModel : Model, pmap : PrecisionMap[Precision])  = {
@@ -503,7 +509,7 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
     var i = iprime
     val dprime = pmap(ast.label)._2
     var d = dprime
-        println("Hello from SATrefine previous precision was " + (i,d))
+       
     val it = ast.iterator
     while (it.hasNext) {
       val subTree = it.next()
@@ -518,15 +524,18 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
               i = iprime.max(newi)
             }
             case FPPlusInfinity => {
+              println("Instant max")
               d = maxFractionalBits
               i = maxIntegralBits
            }
             case FPMinusInfinity => {
-              d = maxFractionalBits
+              println("Instant max")
+              d = maxFractionalBits 
               i = maxIntegralBits
             }
             case FPSpecialValuesFactory(_) => {
               // TODO: Look closer at this
+              println("Instant max")
               d = maxFractionalBits
               i = maxIntegralBits
             }
@@ -548,8 +557,8 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
 
      }
      else if (i == iprime && d == dprime) {
-      i += 4
-      d += 4
+      i += integralStep
+      d += fractionalStep
     }
 
     // TODO: Better mapping function

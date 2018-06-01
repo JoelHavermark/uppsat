@@ -49,6 +49,7 @@ object globalOptions {
   var SURRENDER = false
 
   var FXPRECISION : Option[(Int,Int)] = None
+  var FXSTEP : Option[(Int,Int)] = None
   
   def registeredSolvers(str : String) = {
     str match {
@@ -162,7 +163,8 @@ object main {
    */
   def parseArgument( arg : String) : Boolean = {
     val timeoutPattern = "-t=([0-9.]+)".r
-          val fixprecisionPattern = "-fxp=([0-9.]+),([0-9.]+)".r
+    val fixprecisionPattern = "-fxp=([0-9.]+),([0-9.]+)".r
+    val fixStepPattern = "-fxstep=([0-9.]+),([0-9.]+)".r
       val seedPattern = "-seed=([0-9.]+)".r
       val appPattern = "-app=(\\S+)".r
       val backend = "-backend=(\\S+)".r
@@ -196,6 +198,9 @@ object main {
         }
         case fixprecisionPattern(i,f) => {
           globalOptions.FXPRECISION = Some((i.toInt,f.toInt))
+        }
+        case fixStepPattern(istep,fstep) => {
+          globalOptions.FXSTEP = Some((istep.toInt,fstep.toInt))
         }
         case seedPattern(s) => {
           globalOptions.RANDOM_SEED = s.toInt
