@@ -520,8 +520,8 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
               val bias = math.pow(2,eBits.length-1).toInt - 1
               val newi = bitsToInt(eBits) + 1 - bias
               val newd = (sBits.reverse.dropWhile(x => x == 0).length + 1) - (bitsToInt(eBits)  - bias)
-              d = dprime.max(newd)
-              i = iprime.max(newi)
+              d = d.max(dprime.max(newd))
+              i = i.max(iprime.max(newi))
             }
             case FPPlusInfinity => {
               println("Instant max")
