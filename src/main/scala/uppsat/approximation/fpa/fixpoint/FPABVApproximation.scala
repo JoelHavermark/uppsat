@@ -458,7 +458,7 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
       }
 
       
-      //      case (sort1, sort2) if sort1 == sort2 => ast
+      // case (sort1, sort2) if sort1 == sort2 => ast
       case (sort1, sort2) => {
         println("Could not decode")
         ast.prettyPrint
@@ -497,7 +497,6 @@ trait FPABVRefinementStrategy extends FPABVContext with UniformRefinementStrateg
 
 trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStrategy {
   def increasePrecision(p : Precision) = {
-    println("newprecision " +     precisionOrdering.+(p, (integralStep ,fractionalStep)))
     precisionOrdering.+(p, (integralStep ,fractionalStep))
   }
 
@@ -522,18 +521,15 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
               i = i.max(iprime.max(newi))
             }
             case FPPlusInfinity => {
-              println("Instant max")
               d = maxFractionalBits
               i = maxIntegralBits
            }
             case FPMinusInfinity => {
-              println("Instant max")
               d = maxFractionalBits 
               i = maxIntegralBits
             }
             case FPSpecialValuesFactory(_) => {
               // TODO: Look closer at this
-              println("Instant max")
               d = maxFractionalBits
               i = maxIntegralBits
             }
@@ -547,9 +543,7 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
  
     // TODO: Something is weird here
     // The
-
     if (d > maxFractionalBits  ||  i > maxIntegralBits) {
-      println("precisionoverflow ")
       d = maxFractionalBits
       i = maxIntegralBits
 
@@ -560,7 +554,6 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
     }
 
     // TODO: Better mapping function
-    println("newprecision " + (i,d))
     pmap.map((p : Precision) => precisionOrdering.+(p, (i-p._1,d-p._2)))
     //pmap.map( satRefinePrecision)
   }  
