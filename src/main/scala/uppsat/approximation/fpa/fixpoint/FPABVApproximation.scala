@@ -63,19 +63,45 @@ trait FPABVContext extends ApproximationContext {
       case None => (4,4)
     }
 
-   val precisionOrdering = new IntTuplePrecisionOrdering((4,4), (maxIntegralBits,maxFractionalBits))
-   val inputTheory = FloatingPointTheory
-   val outputTheory = FixPointTheory
+  val precisionOrdering = new IntTuplePrecisionOrdering((4,4), (maxIntegralBits,maxFractionalBits))
+  val inputTheory = FloatingPointTheory
+  val outputTheory = FixPointTheory
+
+  // TODO: Find a more suitable place for this function
+  def bitsNeeeded(failedModel : Model,node : AST) : Option[(Int,Int)] = {
+    failedModel(node).symbol match {
+      case fpLit : FloatingPointLiteral => {
+        fpLit.getFactory match {
+          case FPConstantFactory(_, eBits,  sBits) => {
+            val bias = math.pow(2,eBits.length-1).toInt - 1
+            val newi = bitsToInt(eBits) + 1 - bias
+            val newd = (sBits.reverse.dropWhile(x => x == 0).length + 1) - (bitsToInt(eBits)  - bias)
+            Some((newi,newd))
+          }
+          case FPPlusInfinity => {
+            Some((maxIntegralBits,maxFractionalBits))
+          }
+          case FPMinusInfinity => {
+            Some((maxIntegralBits,maxFractionalBits))
+          }
+          case FPSpecialValuesFactory(_) => {
+            Some((maxIntegralBits,maxFractionalBits))
+          }
+          case FPNegativeZero => {None}
+          case FPPositiveZero => {None}
+        }
+      }
+      case _ => {None}
+    }
+  }
 }
 
 trait FPABVCodec extends FPABVContext with PostOrderCodec {
   var fpToFXMap = Map[ConcreteFunctionSymbol, ConcreteFunctionSymbol]()
 
-  
   // 
   //  Casting/Convertion
   //
-  
   def cast(ast : AST, target : ConcreteSort) : AST = {
     (ast.symbol.sort, target) match {
       case (RealNegation.sort, FXSort(decW, fracW)) => {
@@ -141,8 +167,6 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
     }
   }
 
-  
-  
   /**
    * Converts given floating-point number to a fixed point number of fxsort
    * 
@@ -167,8 +191,7 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
       } else {
         (1 :: sBits, position)
       }
-     
-    
+         
 
     val appendedBits =
      if (fractionalWidth > prependedBits.length - newPosition)
@@ -176,7 +199,6 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
      else
        prependedBits
        
-
     val iBits = appendedBits.drop(newPosition - integralWidth).take(integralWidth)
     val fBits = appendedBits.drop(newPosition).take(fractionalWidth)
 
@@ -226,7 +248,6 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
       } else {
         aBits
       }
-    
     
     // Remove the return
     val leadingZeroes = allBits.takeWhile(_ == 0).length
@@ -496,6 +517,7 @@ trait FPABVRefinementStrategy extends FPABVContext with UniformRefinementStrateg
 } 
 
 trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStrategy {
+
   def increasePrecision(p : Precision) = {
     precisionOrdering.+(p, (integralStep ,fractionalStep))
   }
@@ -510,39 +532,15 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
     val it = ast.iterator
     while (it.hasNext) {
       val subTree = it.next()
-      failedModel(subTree).symbol match {
-        case fpLit : FloatingPointLiteral => { 
-          fpLit.getFactory match {
-            case FPConstantFactory(_, eBits,  sBits) => {
-              val bias = math.pow(2,eBits.length-1).toInt - 1
-              val newi = bitsToInt(eBits) + 1 - bias
-              val newd = (sBits.reverse.dropWhile(x => x == 0).length + 1) - (bitsToInt(eBits)  - bias)
-              d = d.max(dprime.max(newd))
-              i = i.max(iprime.max(newi))
-            }
-            case FPPlusInfinity => {
-              d = maxFractionalBits
-              i = maxIntegralBits
-           }
-            case FPMinusInfinity => {
-              d = maxFractionalBits 
-              i = maxIntegralBits
-            }
-            case FPSpecialValuesFactory(_) => {
-              // TODO: Look closer at this
-              d = maxFractionalBits
-              i = maxIntegralBits
-            }
-            case FPNegativeZero => { }
-            case FPPositiveZero => { }
-          }         
+      bitsNeeeded(failedModel, subTree) match {
+        case Some((newi,newd)) => {
+          i = i.max(newi)
+          d = d.max(newd)
         }
-        case _ => { }
+        case None => {}
       }
     }
- 
-    // TODO: Something is weird here
-    // The
+
     if (d > maxFractionalBits  ||  i > maxIntegralBits) {
       d = maxFractionalBits
       i = maxIntegralBits
@@ -553,9 +551,7 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
        d += fractionalStep
     }
 
-    // TODO: Better mapping function
     pmap.map((p : Precision) => precisionOrdering.+(p, (i-p._1,d-p._2)))
-    //pmap.map( satRefinePrecision)
   }  
 }
 
