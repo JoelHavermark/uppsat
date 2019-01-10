@@ -74,7 +74,7 @@ trait FPABVContext extends ApproximationContext {
         fpLit.getFactory match {
           case FPConstantFactory(_, eBits,  sBits) => {
             val bias = math.pow(2,eBits.length-1).toInt - 1
-            val newi = bitsToInt(eBits) + 1 - bias
+            val newi = bitsToInt(eBits) - bias + 1
             val newd = (sBits.reverse.dropWhile(x => x == 0).length + 1) - (bitsToInt(eBits)  - bias)
             Some((newi,newd))
           }
@@ -524,29 +524,20 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
 
   override def satRefine(ast : AST, decodedModel : Model, failedModel : Model, pmap : PrecisionMap[Precision])  = {
 
-    val iprime =  pmap(ast.label)._1
-    var i = iprime
-    val dprime = pmap(ast.label)._2
-    var d = dprime
-   
-    val it = ast.iterator
-    while (it.hasNext) {
-      val subTree = it.next()
-      bitsNeeeded(failedModel, subTree) match {
-        case Some((newi,newd)) => {
-          i = i.max(newi)
-          d = d.max(newd)
-        }
-        case None => {}
-      }
+    val bitList  = for (subTree <- ast.iterator.toList if bitsNeeeded(failedModel, subTree) != None )
+    yield bitsNeeeded(failedModel, subTree) match {
+      case Some(p) => {p}
     }
+
+    var i = pmap(ast.label)._1.max(bitList.map(_._1).max)
+    var d = pmap(ast.label)._2.max(bitList.map(_._2).max)
 
     if (d > maxFractionalBits  ||  i > maxIntegralBits) {
       d = maxFractionalBits
       i = maxIntegralBits
 
      }
-     else if (i == iprime && d == dprime) {
+     else if (i == pmap(ast.label)._1 && d == pmap(ast.label)._2) {
        i += integralStep
        d += fractionalStep
     }
