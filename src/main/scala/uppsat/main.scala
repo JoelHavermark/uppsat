@@ -74,7 +74,7 @@ object globalOptions {
       case "fixedpoint-no-reconstruct" =>  new Approximation(FPABVEmptyApp)
       case "ijcar-node-by-node" => new Approximation(IJCARSmallFloatsNodeByNodeApp)
       case "ijcar-no-reconstruct" => new Approximation(IJCARSmallFloatsEmptyapp)
-      case "joels" => new Approximation(FPABVMaxUni)
+      case "fixedpoint-uniform-max" => new Approximation(FPABVUniformMaxRefinementApp)
       case _ => throw new Exception("Unsupported approximation: \"" + str + "\"")
     }
   } 

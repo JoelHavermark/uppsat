@@ -516,7 +516,7 @@ trait FPABVRefinementStrategy extends FPABVContext with UniformRefinementStrateg
   }
 } 
 
-trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStrategy {
+trait FPABVUniformMaxRefinementStrategy extends FPABVContext with UniformRefinementStrategy {
 
   def increasePrecision(p : Precision) = {
     precisionOrdering.+(p, (integralStep ,fractionalStep))
@@ -546,10 +546,10 @@ trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStra
   }  
 }
 
-object FPABVMaxUni extends FPABVContext
+object FPABVUniformMaxRefinementApp extends FPABVContext
                   with FPABVCodec
                   with EqualityAsAssignmentReconstruction
-                  with FPABVMaxRefinementStrategy {
+                  with FPABVUniformMaxRefinementStrategy {
 }
 
 object FPABVApp extends FPABVContext 
