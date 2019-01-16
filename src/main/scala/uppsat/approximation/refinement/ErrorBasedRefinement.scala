@@ -11,25 +11,25 @@ import uppsat.globalOptions._
 // Error based refinement strategy uses a measure of error to
 // determine which precisions need to be refined
 // TODO: (Aleks) "Magic" numbers, I don't understand them
-trait ErrorBasedRefinementStrategy extends PostOrderRefinement {
+trait ErrorBasedRefinementStrategy[ErrorType] extends PostOrderRefinement {
   val fractionToRefine : Double
   val precisionIncrement : Precision
 
-  def nodeError(decodedModel : Model)(failedModel : Model)(accu : Map[AST, Double], ast : AST) : Map[AST, Double]
+  def nodeError(decodedModel : Model)(failedModel : Model)(accu : Map[AST, ErrorType], ast : AST) : Map[AST, ErrorType]
   
   def defaultRefinePrecision( p : Precision) : Precision = {
      precisionOrdering.+(p, precisionIncrement)
   }
 
-  def cmpErrors(f1 : Double, f2: Double) : Boolean = {
-    val d1 = f1.doubleValue()
-    val d2 = f2.doubleValue()
-    d1.compareTo(d2) > 0
-  }
+  def cmpErrors(f1 : ErrorType, f2: ErrorType) : Boolean // = {
+    // val d1 = f1.doubleValue()
+    // val d2 = f2.doubleValue()
+    // d1.compareTo(d2) > 0
+  // }
 
   override def satRefine(ast : AST, decodedModel : Model, failedModel : Model, pmap : PrecisionMap[Precision])
       : PrecisionMap[Precision] = {
-    val accu = Map[AST, Double]()
+    val accu = Map[AST, ErrorType]()
     val errorRatios = AST.postVisit(ast, accu, nodeError(decodedModel)(failedModel))
     val sortedErrRatios = errorRatios.toList.sortWith((x, y) => cmpErrors(x._2, y._2))
     val k = math.ceil(fractionToRefine * sortedErrRatios.length).toInt //TODO: Assertions

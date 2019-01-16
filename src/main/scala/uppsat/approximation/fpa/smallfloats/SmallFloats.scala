@@ -225,7 +225,7 @@ trait SmallFloatsPGRefinementStrategy extends UniformPGRefinementStrategy {
 }
 
 trait SmallFloatsMGRefinementStrategy extends SmallFloatsContext 
-                                       with ErrorBasedRefinementStrategy {
+                                       with ErrorBasedRefinementStrategy[Double] {
   val topK = 10 // K 
   val fractionToRefine = 1.0//K_percentage
   val precisionIncrement = 1 // 20/100 = 1/5
@@ -236,7 +236,13 @@ trait SmallFloatsMGRefinementStrategy extends SmallFloatsContext
     newP min pmap.precisionOrdering.maximalPrecision // TODO:  This check should be in the ordering somewhere?
                                                      // AZ: pMap Already does this check in the map call. We should cut this.
   }
-  
+
+  def cmpErrors(d1_ : Double, d2_ : Double) : Boolean = {
+    val d1 = d1_.doubleValue()
+    val d2 = d2_.doubleValue()
+    d1.compareTo(d2) > 0    
+  }
+
   def computeRelativeError ( ast : AST, decodedModel : Model, failedModel : Model) : Option[Double] = {
     (decodedModel(ast).symbol, failedModel(ast).symbol) match {
       case (aValue : FloatingPointLiteral, bValue : FloatingPointLiteral) => 
