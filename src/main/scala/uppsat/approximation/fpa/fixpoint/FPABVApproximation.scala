@@ -63,19 +63,45 @@ trait FPABVContext extends ApproximationContext {
       case None => (4,4)
     }
 
-   val precisionOrdering = new IntTuplePrecisionOrdering((4,4), (maxIntegralBits,maxFractionalBits))
-   val inputTheory = FloatingPointTheory
-   val outputTheory = FixPointTheory
+  val precisionOrdering = new IntTuplePrecisionOrdering((4,4), (maxIntegralBits,maxFractionalBits))
+  val inputTheory = FloatingPointTheory
+  val outputTheory = FixPointTheory
+
+  // TODO: Find a more suitable place for this function
+  def bitsNeeeded(failedModel : Model,node : AST) : Option[(Int,Int)] = {
+    failedModel(node).symbol match {
+      case fpLit : FloatingPointLiteral => {
+        fpLit.getFactory match {
+          case FPConstantFactory(_, eBits,  sBits) => {
+            val bias = math.pow(2,eBits.length-1).toInt - 1
+            val newi = bitsToInt(eBits) - bias + 1
+            val newd = (sBits.reverse.dropWhile(x => x == 0).length + 1) - (bitsToInt(eBits)  - bias)
+            Some((newi,newd))
+          }
+          case FPPlusInfinity => {
+            Some((maxIntegralBits,maxFractionalBits))
+          }
+          case FPMinusInfinity => {
+            Some((maxIntegralBits,maxFractionalBits))
+          }
+          case FPSpecialValuesFactory(_) => {
+            Some((maxIntegralBits,maxFractionalBits))
+          }
+          case FPNegativeZero => {None}
+          case FPPositiveZero => {None}
+        }
+      }
+      case _ => {None}
+    }
+  }
 }
 
 trait FPABVCodec extends FPABVContext with PostOrderCodec {
   var fpToFXMap = Map[ConcreteFunctionSymbol, ConcreteFunctionSymbol]()
 
-  
   // 
   //  Casting/Convertion
   //
-  
   def cast(ast : AST, target : ConcreteSort) : AST = {
     (ast.symbol.sort, target) match {
       case (RealNegation.sort, FXSort(decW, fracW)) => {
@@ -141,8 +167,6 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
     }
   }
 
-  
-  
   /**
    * Converts given floating-point number to a fixed point number of fxsort
    * 
@@ -167,8 +191,7 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
       } else {
         (1 :: sBits, position)
       }
-     
-    
+         
 
     val appendedBits =
      if (fractionalWidth > prependedBits.length - newPosition)
@@ -176,7 +199,6 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
      else
        prependedBits
        
-
     val iBits = appendedBits.drop(newPosition - integralWidth).take(integralWidth)
     val fBits = appendedBits.drop(newPosition).take(fractionalWidth)
 
@@ -226,7 +248,6 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
       } else {
         aBits
       }
-    
     
     // Remove the return
     val leadingZeroes = allBits.takeWhile(_ == 0).length
@@ -458,7 +479,7 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
       }
 
       
-//      case (sort1, sort2) if sort1 == sort2 => ast
+      // case (sort1, sort2) if sort1 == sort2 => ast
       case (sort1, sort2) => {
         println("Could not decode")
         ast.prettyPrint
@@ -488,207 +509,47 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
     decodedModel
   }
 }
-//
+
 trait FPABVRefinementStrategy extends FPABVContext with UniformRefinementStrategy {
   def increasePrecision(p : Precision) = {
     precisionOrdering.+(p, (4,4))
   }
 } 
 
+trait FPABVUniformMaxRefinementStrategy extends FPABVContext with UniformRefinementStrategy {
 
-trait FPABVMaxRefinementStrategy extends FPABVContext with UniformRefinementStrategy {
   def increasePrecision(p : Precision) = {
-    println("newprecision " +     precisionOrdering.+(p, (integralStep ,fractionalStep)))
     precisionOrdering.+(p, (integralStep ,fractionalStep))
   }
 
   override def satRefine(ast : AST, decodedModel : Model, failedModel : Model, pmap : PrecisionMap[Precision])  = {
 
-
-    val iprime =  pmap(ast.label)._1
-    var i = iprime
-    val dprime = pmap(ast.label)._2
-    var d = dprime
-       
-    val it = ast.iterator
-    while (it.hasNext) {
-      val subTree = it.next()
-      failedModel(subTree).symbol match {
-        case fpLit : FloatingPointLiteral => { 
-          fpLit.getFactory match {
-            case FPConstantFactory(_, eBits,  sBits) => {
-              val bias = math.pow(2,eBits.length-1).toInt - 1
-              val newi = bitsToInt(eBits) + 1 - bias
-              val newd = (sBits.reverse.dropWhile(x => x == 0).length + 1) - (bitsToInt(eBits)  - bias)
-              d = d.max(dprime.max(newd))
-              i = i.max(iprime.max(newi))
-            }
-            case FPPlusInfinity => {
-              println("Instant max")
-              d = maxFractionalBits
-              i = maxIntegralBits
-           }
-            case FPMinusInfinity => {
-              println("Instant max")
-              d = maxFractionalBits 
-              i = maxIntegralBits
-            }
-            case FPSpecialValuesFactory(_) => {
-              // TODO: Look closer at this
-              println("Instant max")
-              d = maxFractionalBits
-              i = maxIntegralBits
-            }
-            case FPNegativeZero => { }
-            case FPPositiveZero => { }
-          }         
-        }
-        case _ => { }
-      }
+    val bitList  = for (subTree <- ast.iterator.toList if bitsNeeeded(failedModel, subTree) != None )
+    yield bitsNeeeded(failedModel, subTree) match {
+      case Some(p) => {p}
     }
- 
-    // TODO: Something is weird here
-    // The
+
+    var i = pmap(ast.label)._1.max(bitList.map(_._1).max)
+    var d = pmap(ast.label)._2.max(bitList.map(_._2).max)
 
     if (d > maxFractionalBits  ||  i > maxIntegralBits) {
-       println("precisionoverflow ")
-       d = maxFractionalBits
+      d = maxFractionalBits
       i = maxIntegralBits
 
      }
-     else if (i == iprime && d == dprime) {
-      i += integralStep
-      d += fractionalStep
+     else if (i == pmap(ast.label)._1 && d == pmap(ast.label)._2) {
+       i += integralStep
+       d += fractionalStep
     }
 
-    // TODO: Better mapping function
-    println("newprecision " + (i,d))
     pmap.map((p : Precision) => precisionOrdering.+(p, (i-p._1,d-p._2)))
-    //pmap.map( satRefinePrecision)
   }  
 }
 
-// TODO: The copied functions
-trait FPABVCompRef extends FPABVContext with ErrorBasedRefinementStrategy {
-  // TODO: Set this value to something good.
-  val fractionToRefine = 3.0
-  val precisionIncrement = (4,4)
-
-  // Probably done
-  override def defaultRefinePrecision(p : Precision) : Precision = {
-    println("hello")
-    precisionOrdering.+(p, (4,4))
-  }
-
-  def unsatRefinePrecision(p : Precision) : Precision = {
-
-        precisionOrdering.+(p, (4,4))
-  }
-  
-  def unsatRefine(ast : AST, core : List[AST], pmap : PrecisionMap[Precision]) : PrecisionMap[Precision] = {
-    pmap.map(unsatRefinePrecision)
-  }
-
-  // Should calculate how much error each node increase error
-  // based on the things in paper two and three.
-  def nodeError(decodedModel : Model)(failedModel : Model)(accu : Map[AST, Double], ast : AST) : Map[AST, Double] = {
-
-    val AST(symbol, label, children) = ast      
-    symbol match {
-      case literal : FloatingPointLiteral => accu
-      case fpfs : FloatingPointFunctionSymbol if (fpfs.getFactory == FPToFPFactory) =>       accu + (ast -> 0 )        
-      case fpfs : FloatingPointFunctionSymbol => {
-
-        // TODO Watch out for casting functions 
-        val Some(outErr) = computeRelativeError(ast, decodedModel, failedModel)
-        val inErrors = children.map(computeRelativeError(_, decodedModel, failedModel)).collect{case Some(x) => x}
-        val sumInErrors = inErrors.fold(0.0){(x,y) => x + y}
-        val avgInErr = sumInErrors /  inErrors.length
-        println(outErr / (1 + avgInErr))
-        accu + (ast -> outErr / (1 + avgInErr))        
-      }
-      case _ => accu
-    }
-  }
-
-  // Copied from smallfloats
-  // What does one vertical bar mean in case
-  def relativeError(decoded : FloatingPointLiteral, precise : FloatingPointLiteral) : Double = {
-    (decoded.getFactory, precise.getFactory) match {
-      case (x, y) if (x == y) =>
-        0.0 //Values are the same
-      case (FPPlusInfinity, _)    |
-           (_, FPPlusInfinity)    |
-           (FPMinusInfinity, _)   |
-           (_, FPMinusInfinity)   => Double.PositiveInfinity
-      case (x : FPConstantFactory, y : FPConstantFactory) => {
-        val a = bitsToDouble(decoded)
-        val b = bitsToDouble(precise)
-        Math.abs((a - b)/b)
-      }        
-      case _ =>
-        0.0
-    }
-  }
-
-  // Copied from smallfloats
-  def computeRelativeError ( ast : AST, decodedModel : Model, failedModel : Model) : Option[Double] = {
-   (decodedModel(ast).symbol, failedModel(ast).symbol) match {
-      case (aValue : FloatingPointLiteral, bValue : FloatingPointLiteral) => 
-          Some(relativeError(aValue, bValue))
-      case _ => None
-    }
-  }
-
-
-  // TODO A lot 
-  def satRefinePrecision( ast : AST, pmap : PrecisionMap[Precision]) : Precision = {
-      val p = pmap(ast.label)
-  
-    println("Hello")
-    ast.symbol match {
-      case fpLit : FloatingPointLiteral => {
-        fpLit.getFactory match {
-          case FPConstantFactory(_, eBits,  sBits) => {
-           
-            val bias = math.pow(2,eBits.length-1).toInt - 1
-            val prec = ((bitsToInt(eBits) + 1 - bias), (sBits.reverse.dropWhile(x => x == 0).length + 1 - (bitsToInt(eBits)  - bias)))
-            prec
-        
-          }
-          case FPPlusInfinity => {
-            (maxIntegralBits,maxFractionalBits)
-          }
-          case FPMinusInfinity => {
-            (maxIntegralBits,maxFractionalBits)
-          }
-          case FPNegativeZero => {(p._1,p._2)}
-          case FPPositiveZero => {(p._1,p._2)}
-        }
-      }
-      case fpSym : FloatingPointFunctionSymbol => {
-        // TODO: Do something better here maybe take max of children
-        println("THIS IS IT")
-        (p._1,p._2)
-      }
-      case fpPred : FloatingPointPredicateSymbol => {
-        (p._1,p._2)
-      }
-      //case _ => {(0,0) }
-    }
-  }
-}
-
-object FPABVCompInc extends FPABVContext
-    with FPABVCodec
-    with EqualityAsAssignmentReconstruction
-    with FPABVCompRef {
-}
-
-object FPABVMaxUni extends FPABVContext
-    with FPABVCodec
-    with EqualityAsAssignmentReconstruction
-    with FPABVMaxRefinementStrategy {
+object FPABVUniformMaxRefinementApp extends FPABVContext
+                  with FPABVCodec
+                  with EqualityAsAssignmentReconstruction
+                  with FPABVUniformMaxRefinementStrategy {
 }
 
 object FPABVApp extends FPABVContext 
