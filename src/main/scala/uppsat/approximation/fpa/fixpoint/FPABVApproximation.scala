@@ -68,7 +68,8 @@ trait FPABVContext extends ApproximationContext {
   val outputTheory = FixPointTheory
 
   // TODO: Find a more suitable place for this function
-  def bitsNeeeded(failedModel : Model,node : AST) : Option[(Int,Int)] = {
+  // Calculates the bits needed to store a floating point literal as a fixed
+  def bitsNeeeded(failedModel : Model,node : AST) : (Int,Int) = {
     failedModel(node).symbol match {
       case fpLit : FloatingPointLiteral => {
         fpLit.getFactory match {
@@ -76,22 +77,22 @@ trait FPABVContext extends ApproximationContext {
             val bias = math.pow(2,eBits.length-1).toInt - 1
             val newi = bitsToInt(eBits) - bias + 1
             val newd = (sBits.reverse.dropWhile(x => x == 0).length + 1) - (bitsToInt(eBits)  - bias)
-            Some((newi,newd))
+            (newi,newd)
           }
           case FPPlusInfinity => {
-            Some((maxIntegralBits,maxFractionalBits))
+            (maxIntegralBits,maxFractionalBits)
           }
           case FPMinusInfinity => {
-            Some((maxIntegralBits,maxFractionalBits))
+            (maxIntegralBits,maxFractionalBits)
           }
           case FPSpecialValuesFactory(_) => {
-            Some((maxIntegralBits,maxFractionalBits))
+            (maxIntegralBits,maxFractionalBits)
           }
-          case FPNegativeZero => {None}
-          case FPPositiveZero => {None}
+          case FPNegativeZero => {(1,1)}
+          case FPPositiveZero => {(1,1)}
         }
       }
-      case _ => {None}
+      case _ => {(0,0)}
     }
   }
 }
@@ -524,10 +525,8 @@ trait FPABVUniformMaxRefinementStrategy extends FPABVContext with UniformRefinem
 
   override def satRefine(ast : AST, decodedModel : Model, failedModel : Model, pmap : PrecisionMap[Precision])  = {
 
-    val bitList  = for (subTree <- ast.iterator.toList if bitsNeeeded(failedModel, subTree) != None )
-    yield bitsNeeeded(failedModel, subTree) match {
-      case Some(p) => {p}
-    }
+    val bitList  = for (subTree <- ast.iterator.toList)
+    yield bitsNeeeded(failedModel, subTree)
 
     var i = pmap(ast.label)._1.max(bitList.map(_._1).max)
     var d = pmap(ast.label)._2.max(bitList.map(_._2).max)
