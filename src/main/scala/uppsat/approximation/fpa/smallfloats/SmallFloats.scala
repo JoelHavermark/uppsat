@@ -230,7 +230,7 @@ trait SmallFloatsMGRefinementStrategy extends SmallFloatsContext
   val fractionToRefine = 1.0//K_percentage
   val precisionIncrement = 1 // 20/100 = 1/5
 
-  def satRefinePrecision( node : AST, pmap : PrecisionMap[Int]) : Int = {
+  def satRefinePrecision( node : AST, pmap : PrecisionMap[Int],errors : Map[AST, Double]) : Int = {
     val p =  pmap(node.label)    
     val newP = (p + precisionIncrement) max p
     newP min pmap.precisionOrdering.maximalPrecision // TODO:  This check should be in the ordering somewhere?

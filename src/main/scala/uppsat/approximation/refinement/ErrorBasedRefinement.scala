@@ -11,9 +11,11 @@ import uppsat.globalOptions._
 // Error based refinement strategy uses a measure of error to
 // determine which precisions need to be refined
 // TODO: (Aleks) "Magic" numbers, I don't understand them
-trait ErrorBasedRefinementStrategy[ErrorType] extends PostOrderRefinement {
+trait ErrorBasedRefinementStrategy[ErrorType] extends RefinementStrategy {
   val fractionToRefine : Double
   val precisionIncrement : Precision
+
+  def satRefinePrecision( ast : AST, pmap : PrecisionMap[Precision], errors : Map[AST, ErrorType]) : Precision
 
   def nodeError(decodedModel : Model)(failedModel : Model)(accu : Map[AST, ErrorType], ast : AST) : Map[AST, ErrorType]
   
@@ -43,7 +45,7 @@ trait ErrorBasedRefinementStrategy[ErrorType] extends PostOrderRefinement {
          toRefine.filter(
            x => precisionOrdering.lt(newPMap(x.label),  pmap.precisionOrdering.maximalPrecision)
          ).take(k)) {
-      newPMap = newPMap.update(node.label, satRefinePrecision(node, newPMap))
+      newPMap = newPMap.update(node.label, satRefinePrecision(node, newPMap, errorRatios))
       changes += 1
     }
 
