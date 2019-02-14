@@ -30,6 +30,7 @@ import uppsat.solver.Z3Solver
 import uppsat.globalOptions
 import uppsat.approximation.reconstruction.EqualityAsAssignmentReconstruction
 import uppsat.approximation.refinement.UniformRefinementStrategy
+import uppsat.approximation.refinement.UniformPGRefinementStrategy
 import uppsat.approximation.refinement.ErrorBasedRefinementStrategy
 import uppsat.approximation.reconstruction.EmptyReconstruction
 import uppsat.approximation.reconstruction.PostOrderReconstruction
@@ -528,21 +529,100 @@ trait FPABVUniformMaxRefinementStrategy extends FPABVContext with UniformRefinem
     val bitList  = for (subTree <- ast.iterator.toList)
     yield bitsNeeeded(failedModel, subTree)
 
+    // TODO: Change to val
     var i = pmap(ast.label)._1.max(bitList.map(_._1).max)
     var d = pmap(ast.label)._2.max(bitList.map(_._2).max)
 
-    if (d > maxFractionalBits  ||  i > maxIntegralBits) {
-      d = maxFractionalBits
-      i = maxIntegralBits
 
-     }
-     else if (i == pmap(ast.label)._1 && d == pmap(ast.label)._2) {
+    if (i == pmap(ast.label)._1 && d == pmap(ast.label)._2) {
        i += integralStep
        d += fractionalStep
     }
 
     pmap.map((p : Precision) => precisionOrdering.+(p, (i-p._1,d-p._2)))
   }  
+}
+
+
+trait FPABVPGCompositionalRefinementStrategy extends FPABVContext with UniformPGRefinementStrategy {
+  def unsatRefinePrecision(p : Precision) = {
+    precisionOrdering.+(p, (integralStep,fractionalStep))
+  }
+}
+
+// Räkna bara ut alla error
+// KOlla vilken sort som ör rätt i encode node
+// genom att ta max på alla childrens symbol
+
+
+
+trait FPABVMGCompositionalRefinementStrategy extends FPABVContext with ErrorBasedRefinementStrategy[(Int,Int)] {
+
+  val fractionToRefine = 1.0
+  val precisionIncrement = (integralStep,fractionalStep)
+
+  def satRefinePrecision( ast : AST, pmap : PrecisionMap[Precision], errors : Map[AST, Precision]) = {
+
+    val p = pmap(ast.label)
+
+    if (precisionOrdering.lt(p,errors(ast))) {
+      errors(ast)
+    }
+    else {
+      ast.children match {
+        case Nil => {
+          precisionOrdering.+(p,precisionIncrement)
+        }
+        case _ => {
+          val maxChild =  ast.children.map((p : AST) => errors(p)).max
+          if (precisionOrdering.lt(p,maxChild)) {
+            maxChild
+          }
+          else {p}
+        }
+      }
+    }
+  }
+
+  def nodeError(decodedModel : Model)(failedModel : Model)(accu : Map[AST, Precision], ast : AST) = {
+    val AST(symbol, label, children) = ast
+
+    val maxChildError = children match {
+      case Nil => {(0,0)}
+      case _ => {
+        children.map((p : AST) => accu.getOrElse(p, (0,0))).max
+      }
+    } 
+
+    failedModel(ast).symbol match {
+      case _ : FloatingPointLiteral => {
+        val bits = bitsNeeeded(failedModel, ast)
+        val ibits = Math.abs(bits._1)
+        val fbits = Math.abs(bits._2)
+        if (precisionOrdering.lt(bits,maxChildError)) {
+          accu + (ast -> maxChildError)
+        }
+        else {
+          accu + (ast -> bits)
+        }
+      }
+      case  _ => {        
+        accu 
+      }
+    }
+  }
+
+  def cmpErrors(f1 : Precision, f2: Precision) = {
+    precisionOrdering.lt(f2,f1) 
+  }
+
+}
+
+object FPABVCompositionalMaxRefinementApp extends FPABVContext
+                  with FPABVCodec
+                  with EqualityAsAssignmentReconstruction
+                  with FPABVPGCompositionalRefinementStrategy
+                  with FPABVMGCompositionalRefinementStrategy {
 }
 
 object FPABVUniformMaxRefinementApp extends FPABVContext
