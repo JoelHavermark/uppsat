@@ -34,6 +34,16 @@ import uppsat.approximation.refinement.UniformPGRefinementStrategy
 import uppsat.approximation.refinement.ErrorBasedRefinementStrategy
 import uppsat.approximation.reconstruction.EmptyReconstruction
 import uppsat.approximation.reconstruction.PostOrderReconstruction
+import uppsat.approximation.toolbox.Toolbox
+
+// BAD IMPORTS
+import uppsat.ast.AST._
+import uppsat.ModelEvaluator
+import uppsat.ModelEvaluator.Model
+import uppsat.approximation._
+import uppsat.precision._
+import uppsat.approximation.toolbox.Toolbox
+import uppsat.globalOptions._
 
 
 
@@ -68,6 +78,12 @@ trait FPABVContext extends ApproximationContext {
   val inputTheory = FloatingPointTheory
   val outputTheory = FixPointTheory
 
+  def atleastOne(d : Int) : Int = {
+    if (d <= 0) {
+      1}
+    else {
+      d}
+  }
   // TODO: Find a more suitable place for this function
   // Calculates the bits needed to store a floating point literal as a fixed
   def bitsNeeeded(failedModel : Model,node : AST) : (Int,Int) = {
@@ -78,7 +94,7 @@ trait FPABVContext extends ApproximationContext {
             val bias = math.pow(2,eBits.length-1).toInt - 1
             val newi = bitsToInt(eBits) - bias + 1
             val newd = (sBits.reverse.dropWhile(x => x == 0).length + 1) - (bitsToInt(eBits)  - bias)
-            (newi,newd)
+            (atleastOne(newi),atleastOne(newd))
           }
           case FPPlusInfinity => {
             (maxIntegralBits,maxFractionalBits)
@@ -546,15 +562,10 @@ trait FPABVUniformMaxRefinementStrategy extends FPABVContext with UniformRefinem
 
 trait FPABVPGCompositionalRefinementStrategy extends FPABVContext with UniformPGRefinementStrategy {
   def unsatRefinePrecision(p : Precision) = {
+    println("UNSAT REFINING")
     precisionOrdering.+(p, (integralStep,fractionalStep))
   }
 }
-
-// Räkna bara ut alla error
-// KOlla vilken sort som ör rätt i encode node
-// genom att ta max på alla childrens symbol
-
-
 
 trait FPABVMGCompositionalRefinementStrategy extends FPABVContext with ErrorBasedRefinementStrategy[(Int,Int)] {
 
@@ -562,49 +573,28 @@ trait FPABVMGCompositionalRefinementStrategy extends FPABVContext with ErrorBase
   val precisionIncrement = (integralStep,fractionalStep)
 
   def satRefinePrecision( ast : AST, pmap : PrecisionMap[Precision], errors : Map[AST, Precision]) = {
-
-    val p = pmap(ast.label)
-
-    if (precisionOrdering.lt(p,errors(ast))) {
-      errors(ast)
+    if (precisionOrdering.lt(errors(ast),precisionOrdering.maximalPrecision)) {
+      if (precisionOrdering.lt(pmap(ast.label),errors(ast))){
+        println("PRECISION ASSIGNED " + errors(ast))
+        errors(ast)
+      }
+      else {
+        println("PRECISION ASSIGNED " + pmap(ast.label))
+        pmap(ast.label)
+      }
     }
     else {
-      ast.children match {
-        case Nil => {
-          precisionOrdering.+(p,precisionIncrement)
-        }
-        case _ => {
-          val maxChild =  ast.children.map((p : AST) => errors(p)).max
-          if (precisionOrdering.lt(p,maxChild)) {
-            maxChild
-          }
-          else {p}
-        }
-      }
+      precisionOrdering.maximalPrecision
     }
   }
 
   def nodeError(decodedModel : Model)(failedModel : Model)(accu : Map[AST, Precision], ast : AST) = {
     val AST(symbol, label, children) = ast
 
-    val maxChildError = children match {
-      case Nil => {(0,0)}
-      case _ => {
-        children.map((p : AST) => accu.getOrElse(p, (0,0))).max
-      }
-    } 
-
     failedModel(ast).symbol match {
       case _ : FloatingPointLiteral => {
         val bits = bitsNeeeded(failedModel, ast)
-        val ibits = Math.abs(bits._1)
-        val fbits = Math.abs(bits._2)
-        if (precisionOrdering.lt(bits,maxChildError)) {
-          accu + (ast -> maxChildError)
-        }
-        else {
-          accu + (ast -> bits)
-        }
+        accu + (ast -> bits)    
       }
       case  _ => {        
         accu 
@@ -616,6 +606,31 @@ trait FPABVMGCompositionalRefinementStrategy extends FPABVContext with ErrorBase
     precisionOrdering.lt(f2,f1) 
   }
 
+  override def satRefine(ast : AST, decodedModel : Model, failedModel : Model, pmap : PrecisionMap[Precision])
+      : PrecisionMap[Precision] = {
+    val openPrecision = super.satRefine(ast, decodedModel,failedModel, pmap)
+
+    def checkChildren(acc : PrecisionMap[Precision],ast : AST) : PrecisionMap[Precision] = {
+      val AST(symbol, label, children) = ast
+
+      if (children.isEmpty){
+        acc
+      } else {
+        val imax = acc(ast.label)._1.max(children.map(p => acc(p.label)._1).max)
+        val dmax = acc(ast.label)._2.max(children.map(p => acc(p.label)._2).max)
+
+        if (precisionOrdering.lt(acc(ast.label),(imax,dmax))) {
+          acc.update(ast.label, (imax,dmax))
+        }
+        else {
+          acc
+        }
+      }
+    }
+
+   postVisit(ast,openPrecision,checkChildren(_,_))
+    
+  }
 }
 
 object FPABVCompositionalMaxRefinementApp extends FPABVContext
