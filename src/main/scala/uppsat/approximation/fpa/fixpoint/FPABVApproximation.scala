@@ -24,7 +24,7 @@ import uppsat.precision.PrecisionMap
 import uppsat.precision.PrecisionMap.Path
 import uppsat.precision.IntTuplePrecisionOrdering
 import uppsat.ast._
-import uppsat.ast.AST
+import uppsat.ast.AST._
 import uppsat.ast.AST.Label
 import uppsat.solver.Z3Solver
 import uppsat.globalOptions
@@ -35,14 +35,7 @@ import uppsat.approximation.refinement.ErrorBasedRefinementStrategy
 import uppsat.approximation.reconstruction.EmptyReconstruction
 import uppsat.approximation.reconstruction.PostOrderReconstruction
 import uppsat.approximation.toolbox.Toolbox
-
-// BAD IMPORTS
-import uppsat.ast.AST._
-import uppsat.ModelEvaluator
-import uppsat.ModelEvaluator.Model
-import uppsat.approximation._
 import uppsat.precision._
-import uppsat.approximation.toolbox.Toolbox
 import uppsat.globalOptions._
 
 
@@ -562,7 +555,6 @@ trait FPABVUniformMaxRefinementStrategy extends FPABVContext with UniformRefinem
 
 trait FPABVPGCompositionalRefinementStrategy extends FPABVContext with UniformPGRefinementStrategy {
   def unsatRefinePrecision(p : Precision) = {
-    println("UNSAT REFINING")
     precisionOrdering.+(p, (integralStep,fractionalStep))
   }
 }
@@ -575,11 +567,9 @@ trait FPABVMGCompositionalRefinementStrategy extends FPABVContext with ErrorBase
   def satRefinePrecision( ast : AST, pmap : PrecisionMap[Precision], errors : Map[AST, Precision]) = {
     if (precisionOrdering.lt(errors(ast),precisionOrdering.maximalPrecision)) {
       if (precisionOrdering.lt(pmap(ast.label),errors(ast))){
-        println("PRECISION ASSIGNED " + errors(ast))
         errors(ast)
       }
       else {
-        println("PRECISION ASSIGNED " + pmap(ast.label))
         pmap(ast.label)
       }
     }
@@ -636,6 +626,7 @@ trait FPABVMGCompositionalRefinementStrategy extends FPABVContext with ErrorBase
 object FPABVCompositionalMaxRefinementApp extends FPABVContext
                   with FPABVCodec
                   with EqualityAsAssignmentReconstruction
+                  // with EmptyReconstruction
                   with FPABVPGCompositionalRefinementStrategy
                   with FPABVMGCompositionalRefinementStrategy {
 }
