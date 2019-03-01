@@ -71,8 +71,8 @@ object ApproximationSolver {
       // MAJORTODO : getstringmodel called?
       val appModel = translator.getModel(encodedFormula, stringModel)
       
-      println("appModel")
-      println(appModel)
+      // println("appModel")
+      // println(appModel)
       
       verbose("Decoding model ... ")
       val decodedModel = approximation.decodeModel(formula, appModel, pmap)
