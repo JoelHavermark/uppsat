@@ -542,7 +542,6 @@ trait FPABVUniformMaxRefinementStrategy extends FPABVContext with UniformRefinem
     var i = pmap(ast.label)._1.max(bitList.map(_._1).max)
     var d = pmap(ast.label)._2.max(bitList.map(_._2).max)
 
-
     if (i == pmap(ast.label)._1 && d == pmap(ast.label)._2) {
        i += integralStep
        d += fractionalStep
@@ -552,9 +551,8 @@ trait FPABVUniformMaxRefinementStrategy extends FPABVContext with UniformRefinem
   }  
 }
 
-
 trait FPABVPGCompositionalRefinementStrategy extends FPABVContext with UniformPGRefinementStrategy {
-  println("Calling unsatrefin")
+  println("Called UnsatRefine")
   def unsatRefinePrecision(p : Precision) = {
     precisionOrdering.+(p, (integralStep,fractionalStep))
   }
@@ -568,27 +566,26 @@ trait FPABVMGCompositionalRefinementStrategy extends FPABVContext with ErrorBase
   // Something is very weird here with the precision comparison
   def satRefinePrecision( ast : AST, pmap : PrecisionMap[Precision], errors : Map[AST, Precision]) = {
     if (precisionOrdering.lt(errors(ast),precisionOrdering.maximalPrecision)) {
-      if (precisionOrdering.lt(pmap(ast.label),errors(ast))){
-        errors(ast)
-      }
-      else {
-        println(pmap(ast.label) + " >= " + errors(ast) )
-        pmap(ast.label)
-      }
+      val (iError,fError) = errors(ast)
+      val (ibits,fbits) = pmap(ast.label)
+
+      (ibits.max(iError),fbits.max(fError))
     }
     else {
       precisionOrdering.maximalPrecision
     }
   }
 
+  // Examine the precision comparison
   def nodeError(decodedModel : Model)(failedModel : Model)(accu : Map[AST, Precision], ast : AST) = {
     val AST(symbol, label, children) = ast
 
     failedModel(ast).symbol match {
       case _ : FloatingPointLiteral => {
         val bits = bitsNeeeded(failedModel, ast)
-        println(label + " needs " + bits + "bits")
-        accu + (ast -> bits)    
+//        val dbits = bitsNeeeded(decodedModel, ast)
+  //      accu + (ast -> (Math.abs(bits._1 - dbits._1),Math.abs(bits._2 - dbits._2)))
+        accu + (ast -> bits)
       }
       case  _ => {        
         accu 
@@ -596,40 +593,50 @@ trait FPABVMGCompositionalRefinementStrategy extends FPABVContext with ErrorBase
     }
   }
 
+  // Change this back
   def cmpErrors(f1 : Precision, f2: Precision) = {
+    //f2._1 + f2._2 < f1._1 + f1._2 
     precisionOrdering.lt(f2,f1) 
   }
 
   override def satRefine(ast : AST, decodedModel : Model, failedModel : Model, pmap : PrecisionMap[Precision])
       : PrecisionMap[Precision] = {
-    println("Calling satrefine ")
     val openPrecision = super.satRefine(ast, decodedModel,failedModel, pmap)
 
     def checkChildren(acc : PrecisionMap[Precision],ast : AST) : PrecisionMap[Precision] = {
       val AST(symbol, label, children) = ast
-
       if (children.isEmpty){
         acc
       } else {
         val imax = acc(ast.label)._1.max(children.map(p => acc(p.label)._1).max)
-        val dmax = acc(ast.label)._2.max(children.map(p => acc(p.label)._2).max)
+        val fmax = acc(ast.label)._2.max(children.map(p => acc(p.label)._2).max)
+        val (ibits,fbits) = acc(ast.label)
 
-        if (precisionOrdering.lt(acc(ast.label),(imax,dmax))) {
-          println("The node with label: " + ast.label + " had a precision smaller than its largest child") 
-          acc.update(ast.label, (imax,dmax))
-        }
-        else {
-          acc
-        }
+        val newPrecision = (ibits.max(imax),fbits.max(fmax))
+        acc.update(ast.label,newPrecision)
       }
     }
 
-   val newPmap : PrecisionMap[Precision] =  postVisit(ast,openPrecision,checkChildren(_,_))
-    println("The new pmap is: " + newPmap)
-    if (newPmap == pmap) {
-      println("No changes this is bad")
+    val newPmap : PrecisionMap[Precision] =  postVisit(ast,openPrecision,checkChildren(_,_))
+     
+    /// stats
+    val precisions  = newPmap.map.toList.map(_._2)
+    val summa = precisions.foldLeft((0,0)) {
+     (am,cm) => (am._1+cm._1,am._2+cm._2)
     }
-    newPmap 
+    val mean = (summa._1 / precisions.length ,summa._2 / precisions.length)
+    val maxintegral = precisions.map(_._1).max
+    val maxfrac = precisions.map(_._2).max
+    val minintegral = precisions.map(_._1).min
+    val minfrac = precisions.map(_._2).min
+
+    //{((ai,af),(i,f)) => (ai+i,af+f)}
+    println("mean precision: " + mean)
+    println("max precision: " + (maxintegral,maxfrac))
+    println("min precision: " + (minintegral,minfrac))
+    // println("New pmap" + newPmap)
+    ///
+   newPmap 
   }
 }
 
@@ -665,4 +672,16 @@ object FPABVNodeByNodeApp extends FPABVContext
                   with FPABVRefinementStrategy {
 }
 
+trait DebugMGRefinement extends FPABVContext with FPABVMGCompositionalRefinementStrategy {
+  override def satRefinePrecision(ast : AST, pmap : PrecisionMap[Precision], errors : Map[AST, Precision]) = {
+      precisionOrdering.+(pmap(ast.label),precisionIncrement)
+  }
+}
 
+object DebugApp extends FPABVContext
+    with FPABVCodec
+    with EqualityAsAssignmentReconstruction
+    with DebugMGRefinement
+    with FPABVPGCompositionalRefinementStrategy {
+}
+  
