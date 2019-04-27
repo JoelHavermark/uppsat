@@ -77,9 +77,19 @@ trait FPABVContext extends ApproximationContext {
     else {
       d}
   }
+
   // TODO: Find a more suitable place for this function
-  // Calculates the bits needed to store a floating point literal as a fixed
-  def bitsNeeeded(failedModel : Model,node : AST) : (Int,Int) = {
+  /**
+    * Calculate the numbers of bits needed to represent a floating-point number as a fixed-point number
+    * 
+    * @param failedModel the model to get the fixed-point number from
+    * @param node an AST which root will be used to calculate the necessary bits
+    * 
+    * @return A pair with to ints representing how many integral and fractional bits are needed to represent
+    * the value of "node" in "failedModel" as a fixed-point number. (0,0) is returned if node isn't a 
+    * floating-point literal
+    */
+  def bitsNeeded(failedModel : Model,node : AST) : (Int,Int) = {
     failedModel(node).symbol match {
       case fpLit : FloatingPointLiteral => {
         fpLit.getFactory match {
@@ -107,12 +117,20 @@ trait FPABVContext extends ApproximationContext {
   }
 }
 
+/** FPABVCodec - translation between the two theories 
+  *  
+  */
 trait FPABVCodec extends FPABVContext with PostOrderCodec {
   var fpToFXMap = Map[ConcreteFunctionSymbol, ConcreteFunctionSymbol]()
 
-  // 
-  //  Casting/Convertion
-  //
+  /**
+    * Casting to different fx sorts
+    * 
+    * @param ast the AST that should be converted to the "target" sort
+    * @param target the sort to cast "ast" to
+    * 
+    * @return A new AST with sort "target"
+    */
   def cast(ast : AST, target : ConcreteSort) : AST = {
     (ast.symbol.sort, target) match {
       case (RealNegation.sort, FXSort(decW, fracW)) => {
@@ -242,9 +260,8 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
    * @param fpsort The sort to which the fixed point number should be converted
    * 
    * @return Fixed point number (integralBits.fractionalBits) as a fixed point number of sort fpsort
-
+   * 
    */
-  
   def fixPointToFloat(integralBits : List[Int], fractionalBits : List[Int], fpsort : FPSort) : ConcreteFunctionSymbol = {
     val signBit = integralBits.head
     
@@ -304,7 +321,17 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
     fp(signBit, exponent, mantissa)(fpsort)   
   }
   
-  
+
+  /**
+    * encode a single node in an FPA formula as fixed-point
+    * 
+    * @param symbol What kind of node the encoded one should be
+    * @param label The label of the node to be encoded to ensure consistency between the original and the approximation
+    * @param children The child nodes of the node to be encoded 
+    * @param precision Precision of the encoded node
+    * 
+    * @return An AST representing the supplied node as a fixed-point 
+    */
   def encodeNode(symbol : ConcreteFunctionSymbol, label : Label, children : List[AST], precision : (Int, Int)) : AST = {
     val newSort = FXSortFactory(List(precision._1, precision._2))
       symbol match {
@@ -334,7 +361,6 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
            }           
         }
       }
-      
       
       case fpSym : FloatingPointFunctionSymbol => {
         
@@ -427,7 +453,6 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
   }
   
   // float -> smt-float
-  
   def decodeSymbolValue(symbol : ConcreteFunctionSymbol, value : AST, p : (Int, Int)) = {
     (symbol.sort, value.symbol) match {      
       case (FPSort(e, s), bvl : BitVectorLiteral) => {
@@ -477,10 +502,10 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
       ast
     else
       throw new Exception("Node " + ast + " does not have a value in \n" + appModel.subexprValuation + "\n" + appModel.variableValuation )
-    
+     
   }
-//    
-  
+    
+  // Where is this one used?
   // In contrast to cast, this is working on scala-level, not in SMT
   def decodeValue(ast : AST, target : ConcreteSort, p : Precision) = {
     (ast.symbol, target) match {
@@ -489,7 +514,6 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
         Leaf(fixPointToFloat(bvl.bits.take(decWidth), bvl.bits.drop(decWidth), fpsort))        
       }
 
-      
       // case (sort1, sort2) if sort1 == sort2 => ast
       case (sort1, sort2) => {
         println("Could not decode")
@@ -501,7 +525,15 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
     }
   }
   
-  // decodes values associated with nodes in the formula.
+  /**
+    * decodes values associated with nodes in the formula
+    * 
+    * @param args A tuple with an model for the approximated formula and the current precision
+    * @param decodedModel What have been decoded so far
+    * @param ast The next node to be decoded
+    * 
+    * @return A new model where ast has been decoded
+    */
   def decodeNode( args : (Model, PrecisionMap[Precision]), decodedModel : Model, ast : AST) : Model = {
     val (appModel, pmap) = args
     
@@ -521,24 +553,34 @@ trait FPABVCodec extends FPABVContext with PostOrderCodec {
   }
 }
 
-trait FPABVRefinementStrategy extends FPABVContext with UniformRefinementStrategy {
+trait GlobalConstantRefinementStrategy extends FPABVContext with UniformRefinementStrategy {
   def increasePrecision(p : Precision) = {
     precisionOrdering.+(p, (4,4))
   }
 } 
 
-trait FPABVUniformMaxRefinementStrategy extends FPABVContext with UniformRefinementStrategy {
+trait GlobalVariableRefinementStrategy extends FPABVContext with UniformRefinementStrategy {
 
   def increasePrecision(p : Precision) = {
     precisionOrdering.+(p, (integralStep ,fractionalStep))
   }
 
+  /**
+    * Create a new precision map 
+    * 
+    * @param ast the AST that the new precision map indicates a precision for
+    * @param decodedModel a model for the approximation of @ref ast translated back to the original sort
+    * @param failedModel the decoded model after reconstruction have been applied to it
+    * @param pmap current precision of each node in @ref ast
+    * 
+    * @return a PrecisionMap with the precision set for all nodes set to the largest number of bits needed to
+    * represent any value in the failedModel
+    */
   override def satRefine(ast : AST, decodedModel : Model, failedModel : Model, pmap : PrecisionMap[Precision])  = {
 
     val bitList  = for (subTree <- ast.iterator.toList)
-    yield bitsNeeeded(failedModel, subTree)
+    yield bitsNeeded(failedModel, subTree)
 
-    // TODO: Change to val
     var i = pmap(ast.label)._1.max(bitList.map(_._1).max)
     var d = pmap(ast.label)._2.max(bitList.map(_._2).max)
 
@@ -551,19 +593,26 @@ trait FPABVUniformMaxRefinementStrategy extends FPABVContext with UniformRefinem
   }  
 }
 
-trait FPABVPGCompositionalRefinementStrategy extends FPABVContext with UniformPGRefinementStrategy {
-  println("Called UnsatRefine")
+trait LocalVariablePGRefinementStrategy extends FPABVContext with UniformPGRefinementStrategy {
   def unsatRefinePrecision(p : Precision) = {
     precisionOrdering.+(p, (integralStep,fractionalStep))
   }
 }
 
-trait FPABVMGCompositionalRefinementStrategy extends FPABVContext with ErrorBasedRefinementStrategy[(Int,Int)] {
+trait LocalVariableMGRefinementStrategy extends FPABVContext with ErrorBasedRefinementStrategy[(Int,Int)] {
 
   val fractionToRefine = 1.0
   val precisionIncrement = (integralStep,fractionalStep)
 
-  // Something is very weird here with the precision comparison
+  /**
+    * Update the precision for a single node
+    * 
+    * @param ast The AST that is being refined
+    * @param pmap Current precision of all nodes in ast
+    * @param errors Errors calculated for each node
+    * 
+    * @return An new precision for ast
+    */
   def satRefinePrecision( ast : AST, pmap : PrecisionMap[Precision], errors : Map[AST, Precision]) = {
     if (precisionOrdering.lt(errors(ast),precisionOrdering.maximalPrecision)) {
       val (iError,fError) = errors(ast)
@@ -576,15 +625,23 @@ trait FPABVMGCompositionalRefinementStrategy extends FPABVContext with ErrorBase
     }
   }
 
-  // Examine the precision comparison
+  /**
+    * calculate error for a single node to determine what nodes to increase precision of
+    * 
+    * @param decodedModel A model for the approximation of @ref ast translated back to the original sort
+    * @param failedModel The decoded model after reconstruction have been applied to it
+    * @param accu Accumulator for the errors calculated so far
+    * @param ast AST representing the formula that failed and decodedModel are models for
+    * 
+    * @return A map of the errors calculated so far with the error of ast added
+    * 
+    */
   def nodeError(decodedModel : Model)(failedModel : Model)(accu : Map[AST, Precision], ast : AST) = {
     val AST(symbol, label, children) = ast
 
     failedModel(ast).symbol match {
       case _ : FloatingPointLiteral => {
-        val bits = bitsNeeeded(failedModel, ast)
-//        val dbits = bitsNeeeded(decodedModel, ast)
-  //      accu + (ast -> (Math.abs(bits._1 - dbits._1),Math.abs(bits._2 - dbits._2)))
+        val bits = bitsNeeded(failedModel, ast)
         accu + (ast -> bits)
       }
       case  _ => {        
@@ -593,16 +650,32 @@ trait FPABVMGCompositionalRefinementStrategy extends FPABVContext with ErrorBase
     }
   }
 
-  // Change this back
   def cmpErrors(f1 : Precision, f2: Precision) = {
-    //f2._1 + f2._2 < f1._1 + f1._2 
     precisionOrdering.lt(f2,f1) 
   }
 
+  /**
+    * calculate a new precision where each node gets the bits needed to represent it exactly
+    * 
+    * @param ast The AST to calculate a new precision for
+    * @param decodedModel a model for the approximation of @ref ast translated back to the original sort
+    * @param failedModel the decoded model after reconstruction have been applied to it
+    * @param pmap current precision of each node in @ref ast
+    * 
+    * @return A new precision map where each node is as precise as they have to be
+    */
   override def satRefine(ast : AST, decodedModel : Model, failedModel : Model, pmap : PrecisionMap[Precision])
       : PrecisionMap[Precision] = {
     val openPrecision = super.satRefine(ast, decodedModel,failedModel, pmap)
 
+    /**
+      * ensure that no child have a precision greater than its parent
+      * 
+      * @param acc The current precision 
+      * @param ast The AST whose precision is being checked
+      * 
+      * @return a precision map where ast has a precision atleast as large as its children
+      */
     def checkChildren(acc : PrecisionMap[Precision],ast : AST) : PrecisionMap[Precision] = {
       val AST(symbol, label, children) = ast
       if (children.isEmpty){
@@ -630,58 +703,56 @@ trait FPABVMGCompositionalRefinementStrategy extends FPABVContext with ErrorBase
     val minintegral = precisions.map(_._1).min
     val minfrac = precisions.map(_._2).min
 
-    //{((ai,af),(i,f)) => (ai+i,af+f)}
     println("mean precision: " + mean)
     println("max precision: " + (maxintegral,maxfrac))
     println("min precision: " + (minintegral,minfrac))
-    // println("New pmap" + newPmap)
     ///
    newPmap 
   }
 }
 
-object FPABVCompositionalMaxRefinementApp extends FPABVContext
-                  with FPABVCodec
-                  with EqualityAsAssignmentReconstruction
-                  // with EmptyReconstruction
-                  with FPABVPGCompositionalRefinementStrategy
-                  with FPABVMGCompositionalRefinementStrategy {
-}
-
-object FPABVUniformMaxRefinementApp extends FPABVContext
-                  with FPABVCodec
-                  with EqualityAsAssignmentReconstruction
-                  with FPABVUniformMaxRefinementStrategy {
-}
-
-object FPABVApp extends FPABVContext 
-                  with FPABVCodec
-                  with EqualityAsAssignmentReconstruction
-                  with FPABVRefinementStrategy {
-}
-
-object FPABVEmptyApp extends FPABVContext 
-                  with FPABVCodec
-                  with EmptyReconstruction
-                  with FPABVRefinementStrategy {
-}
-
-object FPABVNodeByNodeApp extends FPABVContext 
-                  with FPABVCodec
-                  with PostOrderReconstruction
-                  with FPABVRefinementStrategy {
-}
-
-trait DebugMGRefinement extends FPABVContext with FPABVMGCompositionalRefinementStrategy {
+trait LocalConstantMGRefinementStrategy extends FPABVContext with LocalVariableMGRefinementStrategy {
   override def satRefinePrecision(ast : AST, pmap : PrecisionMap[Precision], errors : Map[AST, Precision]) = {
       precisionOrdering.+(pmap(ast.label),precisionIncrement)
   }
 }
 
-object DebugApp extends FPABVContext
-    with FPABVCodec
-    with EqualityAsAssignmentReconstruction
-    with DebugMGRefinement
-    with FPABVPGCompositionalRefinementStrategy {
+object FPABVLocalVariableApp extends FPABVContext
+                  with FPABVCodec
+                  with EqualityAsAssignmentReconstruction
+                  // with EmptyReconstruction
+                  with LocalVariablePGRefinementStrategy
+                  with LocalVariableMGRefinementStrategy {
+}
+
+object FPABVGlobalVariableApp extends FPABVContext
+                  with FPABVCodec
+                  with EqualityAsAssignmentReconstruction
+                  with GlobalVariableRefinementStrategy {
+}
+
+object FPABVGlobalConstantApp extends FPABVContext 
+                  with FPABVCodec
+                  with EqualityAsAssignmentReconstruction
+                  with GlobalConstantRefinementStrategy {
+}
+
+object FPABVGlobalConstantEmptyApp extends FPABVContext 
+                  with FPABVCodec
+                  with EmptyReconstruction
+                  with GlobalConstantRefinementStrategy {
+}
+
+object FPABVGlobalConstantNodeByNodeApp extends FPABVContext 
+                  with FPABVCodec
+                  with PostOrderReconstruction
+                  with GlobalConstantRefinementStrategy {
+}
+
+object FPABVLocalConstantApp extends FPABVContext
+                 with FPABVCodec
+                 with EqualityAsAssignmentReconstruction
+                 with LocalConstantMGRefinementStrategy
+                 with LocalVariablePGRefinementStrategy {
 }
   
