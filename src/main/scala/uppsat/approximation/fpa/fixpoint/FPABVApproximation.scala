@@ -38,8 +38,6 @@ import uppsat.approximation.toolbox.Toolbox
 import uppsat.precision._
 import uppsat.globalOptions._
 
-
-
 /**
  * FPABVContext - FloatingPoint Arithmetic by BitVector approximations
  * 
@@ -114,6 +112,43 @@ trait FPABVContext extends ApproximationContext {
       }
       case _ => {(0,0)}
     }
+  }
+
+  /**
+    * Calculate and print some statistics about a precision map
+    */
+  def precisionStats(pmap : PrecisionMap[Precision]) = {
+        /// stats
+    val precisions  = pmap.map.toList.map(_._2)
+    val summa = precisions.foldLeft((0,0)) {
+     (am,cm) => (am._1+cm._1,am._2+cm._2)
+    }
+    val mean = (summa._1 / precisions.length ,summa._2 / precisions.length)
+    val maxintegral = precisions.map(_._1).max
+    val maxfrac = precisions.map(_._2).max
+    val minintegral = precisions.map(_._1).min
+    val minfrac = precisions.map(_._2).min
+    val minOrder = precisions.reduceLeft((p1,p2) =>  if (precisionOrdering.lt(p1,p2)) {p1}  else {p2})
+    val maxOrder = precisions.reduceLeft((p1,p2) =>  if (precisionOrdering.lt(p2,p1)) {p2}  else {p1})
+    val sortedPrecisions = precisions.sortWith(precisionOrdering.lt)
+
+    val medianIndex = sortedPrecisions.size / 2
+    val median = medianIndex % 2 match {
+      case 0 => {
+        val (p1,p2) = precisionOrdering.+(sortedPrecisions(medianIndex),sortedPrecisions(medianIndex - 1))
+        (p1 / 2,p2 / 2)
+      }
+      case 1 => sortedPrecisions(medianIndex)
+    }
+
+    println("median: " + median)
+    println("precision sum: " + summa)
+    println("mean precision: " + mean)
+    println("max pOrder: " + maxOrder )
+    println("max precision: " + (maxintegral,maxfrac))
+    println("min pOrder: " + minOrder )
+    println("min precision: " + (minintegral,minfrac))
+    ///
   }
 }
 
@@ -589,7 +624,9 @@ trait GlobalVariableRefinementStrategy extends FPABVContext with UniformRefineme
        d += fractionalStep
     }
 
-    pmap.map((p : Precision) => precisionOrdering.+(p, (i-p._1,d-p._2)))
+    val newPmap = pmap.map((p : Precision) => precisionOrdering.+(p, (i-p._1,d-p._2)))
+    precisionStats(newPmap)
+    newPmap
   }  
 }
 
@@ -691,22 +728,7 @@ trait LocalVariableMGRefinementStrategy extends FPABVContext with ErrorBasedRefi
     }
 
     val newPmap : PrecisionMap[Precision] =  postVisit(ast,openPrecision,checkChildren(_,_))
-     
-    /// stats
-    val precisions  = newPmap.map.toList.map(_._2)
-    val summa = precisions.foldLeft((0,0)) {
-     (am,cm) => (am._1+cm._1,am._2+cm._2)
-    }
-    val mean = (summa._1 / precisions.length ,summa._2 / precisions.length)
-    val maxintegral = precisions.map(_._1).max
-    val maxfrac = precisions.map(_._2).max
-    val minintegral = precisions.map(_._1).min
-    val minfrac = precisions.map(_._2).min
-
-    println("mean precision: " + mean)
-    println("max precision: " + (maxintegral,maxfrac))
-    println("min precision: " + (minintegral,minfrac))
-    ///
+   precisionStats(newPmap)
    newPmap 
   }
 }
