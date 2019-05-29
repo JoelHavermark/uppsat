@@ -50,7 +50,8 @@ object globalOptions {
 
   var FXPRECISION : Option[(Int,Int)] = None
   var FXSTEP : Option[(Int,Int)] = None
-  
+  var FXK : Option[Double] = None
+
   def registeredSolvers(str : String) = {
     str match {
       case "z3" => new Z3Solver() 
@@ -166,6 +167,7 @@ object main {
     val timeoutPattern = "-t=([0-9.]+)".r
     val fixprecisionPattern = "-fxp=([0-9.]+),([0-9.]+)".r
     val fixStepPattern = "-fxstep=([0-9.]+),([0-9.]+)".r
+    val fracToRefinePattern = "-k=(0\\.[0-9.]+)".r
       val seedPattern = "-seed=([0-9.]+)".r
       val appPattern = "-app=(\\S+)".r
       val backend = "-backend=(\\S+)".r
@@ -202,6 +204,9 @@ object main {
         }
         case fixStepPattern(istep,fstep) => {
           globalOptions.FXSTEP = Some((istep.toInt,fstep.toInt))
+        }
+        case fracToRefinePattern(k) => {
+          globalOptions.FXK = Some(k.toDouble)
         }
         case seedPattern(s) => {
           globalOptions.RANDOM_SEED = s.toInt

@@ -53,6 +53,11 @@ import uppsat.globalOptions._
 trait FPABVContext extends ApproximationContext {
   type Precision = (Int, Int) // (integralBits, FractionalBits)
 
+  val K = globalOptions.FXK match {
+    case Some(k) => k
+    case None => 1.0
+  }
+
   val (maxIntegralBits,maxFractionalBits) =
     globalOptions.FXPRECISION match {
       case Some((i,f)) => (i,f)
@@ -141,6 +146,7 @@ trait FPABVContext extends ApproximationContext {
       case 1 => sortedPrecisions(medianIndex)
     }
 
+    val nodesAtMax = precisions.map(p => if (precisionOrdering.lt(p,precisionOrdering.maximalPrecision)) 0 else 1).sum
     println("median: " + median)
     println("precision sum: " + summa)
     println("mean precision: " + mean)
@@ -148,6 +154,8 @@ trait FPABVContext extends ApproximationContext {
     println("max precision: " + (maxintegral,maxfrac))
     println("min pOrder: " + minOrder )
     println("min precision: " + (minintegral,minfrac))
+    println("nodes at max: " + nodesAtMax)
+    println("nr of nodes: " + precisions.size)
     ///
   }
 }
@@ -634,11 +642,17 @@ trait LocalVariablePGRefinementStrategy extends FPABVContext with UniformPGRefin
   def unsatRefinePrecision(p : Precision) = {
     precisionOrdering.+(p, (integralStep,fractionalStep))
   }
+
+  override def unsatRefine(ast : AST, core : List[AST], pmap : PrecisionMap[Precision]) : PrecisionMap[Precision] = {
+    val newPmap = pmap.map(p => unsatRefinePrecision(p))
+    precisionStats(newPmap)
+    newPmap
+  }
 }
 
 trait LocalVariableMGRefinementStrategy extends FPABVContext with ErrorBasedRefinementStrategy[(Int,Int)] {
 
-  val fractionToRefine = 1.0
+  val fractionToRefine = K
   val precisionIncrement = (integralStep,fractionalStep)
 
   /**
@@ -736,6 +750,13 @@ trait LocalVariableMGRefinementStrategy extends FPABVContext with ErrorBasedRefi
 trait LocalConstantMGRefinementStrategy extends FPABVContext with LocalVariableMGRefinementStrategy {
   override def satRefinePrecision(ast : AST, pmap : PrecisionMap[Precision], errors : Map[AST, Precision]) = {
       precisionOrdering.+(pmap(ast.label),precisionIncrement)
+  }
+
+  override def satRefine(ast : AST, decodedModel : Model, failedModel : Model, pmap : PrecisionMap[Precision])
+      : PrecisionMap[Precision] = {
+    val newPmap = super.satRefine(ast, decodedModel,failedModel, pmap)
+    precisionStats(newPmap)
+    newPmap
   }
 }
 
