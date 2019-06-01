@@ -752,12 +752,6 @@ trait LocalConstantMGRefinementStrategy extends FPABVContext with LocalVariableM
       precisionOrdering.+(pmap(ast.label),precisionIncrement)
   }
 
-  override def satRefine(ast : AST, decodedModel : Model, failedModel : Model, pmap : PrecisionMap[Precision])
-      : PrecisionMap[Precision] = {
-    val newPmap = super.satRefine(ast, decodedModel,failedModel, pmap)
-    precisionStats(newPmap)
-    newPmap
-  }
 }
 
 object FPABVLocalVariableApp extends FPABVContext
