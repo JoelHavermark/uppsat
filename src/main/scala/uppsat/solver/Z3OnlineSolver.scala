@@ -6,6 +6,7 @@ import sys.process._
 import scala.sys.process.stringToProcess
 import uppsat.solver._
 import java.io.BufferedReader;
+import uppsat.globalOptions
 import java.io.InputStreamReader;
 import uppsat.Timer
 import uppsat.ast.ConcreteFunctionSymbol
@@ -30,7 +31,15 @@ class Z3OnlineSolver(checkSatCmd : String = "(check-sat)\n") extends SMTSolver {
       println("[Z3] " + str)
   
   // Starting solver...
-  val process = Runtime.getRuntime().exec("z3 -in")
+
+  val cmd =
+    if (globalOptions.DEADLINE.isDefined) {
+      val dlf = ((globalOptions.remainingTime.get) / 1000.0).ceil.toInt
+      "z3 -T:" + dlf + " -in"
+    } else {
+      "z3 -in"
+    }
+  val process = Runtime.getRuntime().exec(cmd)
   z3print("[Started process: " + process)
   val stdin = process.getOutputStream ()
   val stderr = process.getErrorStream ()
